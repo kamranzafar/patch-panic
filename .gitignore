@@ -1,0 +1,29 @@
+# --- Python -------------------------------------------------------------
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+venv/
+
+# Packaging (pip install -e . creates *.egg-info; builds go to build/ and dist/)
+*.egg-info/
+build/
+dist/
+
+# PyInstaller (the generated .spec file is recreated on each build)
+*.spec
+
+# --- Tools ----------------------------------------------------------------
+.pytest_cache/
+.coverage
+htmlcov/
+
+# PyCharm / JetBrains: project settings contain machine-specific paths
+.idea/
+
+# --- OS junk -------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+.docs/
