@@ -87,6 +87,7 @@ class Effects:
         bus.subscribe(Event.POWERUP_COLLECTED, self._on_powerup)
         bus.subscribe(Event.GREMLIN_HIT, self._on_gremlin_hit)
         bus.subscribe(Event.GREMLIN_SPLIT, lambda x, y: self.burst(x, y, Color.SPLITTER, 10))
+        bus.subscribe(Event.DISK_STOLEN, lambda x, y: self.popup(x, y - 30, "Disk stolen!", Color.RED))
         bus.subscribe(Event.CABLE_SABOTAGED, lambda x, y: self.burst(x, y, Color.SURGE, 10))
         bus.subscribe(Event.NEW_THREAT, lambda kind: self.show_banner(f"NEW THREAT: {kind.label}! {kind.hint}"))
         bus.subscribe(Event.COMBO, lambda count, x, y: self.popup(x, y - 44, f"x{count} COMBO", Color.COMBO))

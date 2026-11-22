@@ -28,8 +28,8 @@ from enum import Enum, auto
 
 from .config import (BLOAT, CABLES_PER_COMPUTER, CARRIER_SPEED_FACTOR, COMBO_MAX, COMBO_WINDOW,
                      DISK_SNAP_RADIUS, DYING_TIME, FIRST_SPAWN_DELAY, FRY_TIME, GRID_COLS, GRID_ROWS, HEIGHT,
-                     HUD_HEIGHT, LATE_CATCH_FRACTION, OS_NAMES, PERFECT_SAFETY, SABOTAGE_TIME, SURGE_WARNING_TIME,
-                     SWEEP_RADIUS_SCALE, WIDTH, GremlinKind, Gremlins, LevelConfig, Points)
+                     HUD_HEIGHT, LATE_CATCH_FRACTION, OS_NAMES, PERFECT_SAFETY, SABOTAGE_TIME, SCAVENGE_WAIT,
+                     SURGE_WARNING_TIME, SWEEP_RADIUS_SCALE, WIDTH, GremlinKind, Gremlins, LevelConfig, Points)
 from .entities import (Computer, Disk, Gremlin, GremlinState, Honeypot, Point, PowerUp, Surge, SurgeWarning,
                        distance, nearest_exit, random_edge_point)
 from .events import Event, EventBus
@@ -279,8 +279,9 @@ class World:
         gremlin.assign(target)
         return gremlin
 
-    def spawn_saboteur(self, cable: tuple[Computer, Computer], pos: Point | None = None) -> Gremlin:
-        gremlin = self._new_gremlin(Gremlins.SABOTEUR, pos)
+    def spawn_saboteur(self, cable: tuple[Computer, Computer], pos: Point | None = None,
+                       kind: GremlinKind = Gremlins.SABOTEUR) -> Gremlin:
+        gremlin = self._new_gremlin(kind, pos)
         gremlin.assign_cable(cable)
         return gremlin
 
@@ -324,7 +325,7 @@ class World:
         kind = self.rng.choices(self.config.kinds, weights=[k.weight for k in self.config.kinds])[0]
         targets = self.available_targets()
         if kind.sabotages and self.cables:
-            self.spawn_saboteur(self.rng.choice(self.cables))
+            self.spawn_saboteur(self.rng.choice(self.cables), kind=kind)
         elif targets:
             self.spawn_gremlin(self.rng.choice(targets), Gremlins.STANDARD if kind.sabotages else kind)
         else:
@@ -359,6 +360,9 @@ class World:
         if self.honeypot is not None:  # lured: wait by the decoy until it expires
             g.move_toward(*self.honeypot.spot_for(g), dt)
             return
+        if g.kind.scavenges:
+            self._scavenge(g, dt)
+            return
         if g.cable is not None:
             if g.move_toward(*g.cable_spot(), dt):
                 g.start_sabotage()
@@ -371,6 +375,42 @@ class World:
             g.assign(self.rng.choice(targets))
         if g.move_toward(*g.target.work_spot(), dt):
             g.start_install()
+
+    def _scavenge(self, g: Gremlin, dt: float) -> None:
+        """Grab a loose disk if there is one; otherwise chew a cable to knock one loose, then wait."""
+        loot = self._claim_loot(g)
+        if loot is not None:
+            if g.move_toward(loot.x, loot.y, dt):
+                self._steal(g, loot)
+            return
+        if g.cable is not None:
+            if g.move_toward(*g.cable_spot(), dt):
+                g.start_sabotage()
+            return
+        g.timer += dt  # already chewed its cable: linger in case a disk pops out
+        if g.timer >= SCAVENGE_WAIT:
+            g.leave(nearest_exit(g.x, g.y))
+
+    def _claim_loot(self, g: Gremlin) -> Disk | None:
+        """The floor disk this scavenger is after: keep its current one, or claim the nearest free one."""
+        if g.loot is not None and g.loot in self.disks:
+            return g.loot
+        g.loot = None
+        free = [d for d in self.disks
+                if d.claimed_by is None or not d.claimed_by.is_alive or d.claimed_by.loot is not d]
+        if not free:
+            return None
+        g.loot = min(free, key=lambda d: distance((g.x, g.y), (d.x, d.y)))
+        g.loot.claimed_by = g
+        return g.loot
+
+    def _steal(self, g: Gremlin, disk: Disk) -> None:
+        self.disks.remove(disk)
+        g.loot = None
+        g.carry = disk.kind
+        g.speed *= CARRIER_SPEED_FACTOR  # runs for it, like any thief
+        g.leave(nearest_exit(g.x, g.y))
+        self.bus.emit(Event.DISK_STOLEN, x=disk.x, y=disk.y)
 
     def _install(self, g: Gremlin, dt: float) -> None:
         g.timer += dt
@@ -390,10 +430,14 @@ class World:
         if g.timer < SABOTAGE_TIME:
             return
         x, y = g.cable_spot()
-        g.leave(nearest_exit(g.x, g.y))
+        cable = g.cable
+        if g.kind.scavenges:
+            g.finish_sabotage()  # sticks around to grab whatever the surge knocks loose
+        else:
+            g.leave(nearest_exit(g.x, g.y))
         if self.is_shielded or len(self.surges) >= self.config.max_surges + 2:
             return  # the cable is protected, or the network is already as busy as it gets
-        src, dst = g.cable if self.rng.random() < 0.5 else g.cable[::-1]
+        src, dst = cable if self.rng.random() < 0.5 else cable[::-1]
         self.spawn_surge(src, dst, 0.5)
         self.bus.emit(Event.CABLE_SABOTAGED, x=x, y=y)
 

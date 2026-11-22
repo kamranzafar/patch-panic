@@ -43,6 +43,7 @@ SOUND_DEFS = {
     "zap": ([(1200, 2600, 0.09)], 0.2),
     "fry": ([(4000, 600, 0.35, True)], 0.3),
     "warn": ([(300, 340, 0.07), (300, 340, 0.07)], 0.12),
+    "steal": ([(500, 1100, 0.07), (1100, 700, 0.05)], 0.22),
     "clank": ([(1500, 1400, 0.03, True), (900, 700, 0.06)], 0.22),
     "split": ([(300, 600, 0.05), (300, 600, 0.05)], 0.2),
     "threat": ([(220, 220, 0.12), (165, 165, 0.12), (220, 220, 0.12), (165, 165, 0.2)], 0.22),
@@ -69,6 +70,7 @@ SOUND_FOR_EVENT = {
     Event.GREMLIN_SPLIT: "split",
     Event.NEW_THREAT: "threat",
     Event.CABLE_SABOTAGED: "zap",
+    Event.DISK_STOLEN: "steal",
     Event.ACHIEVEMENT_UNLOCKED: "powerup",
 }
 

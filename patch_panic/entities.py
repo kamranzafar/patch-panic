@@ -120,6 +120,7 @@ class Gremlin:
         self.state = GremlinState.WALK_IN
         self.target: Computer | None = None
         self.cable: tuple[Computer, Computer] | None = None  # a saboteur's target
+        self.loot: Disk | None = None  # the floor disk a scavenger is going for
         self.carry: int | None = None  # stolen OS kind
         self.timer = 0.0
         self.facing = 1
@@ -144,6 +145,12 @@ class Gremlin:
 
     def start_sabotage(self) -> None:
         self.state = GremlinState.SABOTAGE
+        self.timer = 0.0
+
+    def finish_sabotage(self) -> None:
+        """Done chewing; walk on (a scavenger then looks for a disk to grab)."""
+        self.cable = None
+        self.state = GremlinState.WALK_IN
         self.timer = 0.0
 
     def assign(self, computer: Computer) -> None:
@@ -244,6 +251,7 @@ class Disk:
         self.x = max(24, min(WIDTH - 24, x))
         self.y = max(HUD_HEIGHT + 24, min(HEIGHT - 24, y))
         self.age = age
+        self.claimed_by: Gremlin | None = None  # a scavenger heading for it
 
     @property
     def rect(self) -> pygame.Rect:

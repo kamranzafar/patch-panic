@@ -44,6 +44,7 @@ class Event(Enum):
     OS_RESTORED = auto()         # computer
     DISK_PICKED_UP = auto()      # disk
     DISK_DROPPED = auto()        # disk
+    DISK_STOLEN = auto()         # x, y (a scavenger picked up a disk from the floor)
     DISK_REJECTED = auto()       # computer, reason
     SURGE_WARNING = auto()       # src, dst
     SURGE_ZAPPED = auto()        # x, y, chained

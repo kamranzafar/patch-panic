@@ -47,6 +47,7 @@ Each kind of gremlin has its own colour, and new kinds join in as the levels go 
 | Armored   | Steel grey, gold horns     | 7          | Takes two swats (the first cracks its armour) |
 | Splitter  | Amber                      | 11         | Splits into two sprinters when swatted        |
 | Saboteur  | Purple, red horns          | 13         | Chews a network cable until it sparks a surge |
+| Scavenger | Dark green, yellow horns   | 17         | Steals OS disks left on the floor and runs off with them; with none around it chews a cable first, then waits for a disk to pop out |
 
 ## Modes
 

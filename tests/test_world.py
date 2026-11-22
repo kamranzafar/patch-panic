@@ -20,7 +20,7 @@ import random
 import pytest
 
 from patch_panic.config import (BLOAT, CARRIER_SPEED_FACTOR, COMBO_MAX, COMBO_WINDOW, DISK_SNAP_RADIUS, FRY_TIME,
-                                HITSTOP_TIME, HONEYPOT_TIME, PERFECT_SAFETY, SABOTAGE_TIME, SHAKE_TIME,
+                                HITSTOP_TIME, HONEYPOT_TIME, PERFECT_SAFETY, SABOTAGE_TIME, SCAVENGE_WAIT, SHAKE_TIME,
                                 SURGE_WARNING_TIME, SWEEP_CLICKS, Gremlins, LevelConfig, Points)
 from patch_panic.effects import Effects
 from patch_panic.entities import Disk, GremlinState, Surge
@@ -434,6 +434,74 @@ def test_swatting_a_saboteur_stops_the_surge(world):
     world.click((saboteur.x, saboteur.y - 12))
     world.update(SABOTAGE_TIME)
     assert not world.surges
+
+
+def scavenger_near(world, x, y):
+    gremlin = world.spawn_saboteur(world.cables[0], pos=(x, y), kind=Gremlins.SCAVENGER)
+    world.to_spawn = 0
+    return gremlin
+
+
+def test_scavenger_steals_a_loose_disk_and_runs(world, bus):
+    rec = Recorder(bus)
+    computer = world.computers[0]
+    computer.os = None
+    disk = Disk(computer.native, 300, 300)
+    world.disks.append(disk)
+    scavenger = scavenger_near(world, 340, 300)
+    speed = scavenger.speed
+    run_until(world, lambda: scavenger.carry is not None, max_seconds=3)
+    assert scavenger.carry == computer.native and disk not in world.disks
+    assert scavenger.state is GremlinState.WALK_OUT
+    assert scavenger.speed == pytest.approx(speed * CARRIER_SPEED_FACTOR)
+    assert Event.DISK_STOLEN in rec.names()
+
+    world.click((scavenger.x, scavenger.y - 12))  # swat it: the disk drops again
+    assert [d.kind for d in world.disks] == [computer.native]
+
+
+def test_scavenger_retargets_when_the_player_grabs_its_disk_first(world):
+    a, b = world.computers[0], world.computers[1]
+    a.os = b.os = None
+    near, far = Disk(a.native, 320, 300), Disk(b.native, 600, 400)
+    world.disks += [near, far]
+    scavenger = scavenger_near(world, 360, 300)
+    world.update(0.01)
+    assert scavenger.loot is near
+    world.click((near.x, near.y))  # the player picks it up first
+    world.update(0.01)
+    assert scavenger.loot is far
+
+
+def test_two_scavengers_go_for_different_disks(world):
+    a, b = world.computers[0], world.computers[1]
+    world.disks += [Disk(a.native, 300, 300), Disk(b.native, 600, 400)]
+    first, second = scavenger_near(world, 450, 350), scavenger_near(world, 460, 350)
+    world.update(0.01)
+    assert first.loot is not None and second.loot is not None and first.loot is not second.loot
+
+
+def test_scavenger_chews_a_cable_then_waits_for_loot(world, bus):
+    rec = Recorder(bus)
+    scavenger = world.spawn_saboteur(world.cables[0], kind=Gremlins.SCAVENGER)
+    scavenger.x, scavenger.y = scavenger.cable_spot()
+    world.to_spawn = 0
+    run_until(world, lambda: Event.CABLE_SABOTAGED in rec.names(), max_seconds=SABOTAGE_TIME + 0.5)
+    assert scavenger.state is GremlinState.WALK_IN and scavenger.cable is None  # sticks around
+    computer = world.computers[2]
+    computer.os = None
+    world.disks.append(Disk(computer.native, scavenger.x + 30, scavenger.y))
+    run_until(world, lambda: scavenger.carry is not None, max_seconds=2)
+
+
+def test_scavenger_leaves_if_nothing_turns_up(world):
+    world.shield_cables(60)  # no surge, so nothing gets knocked loose
+    scavenger = world.spawn_saboteur(world.cables[0], kind=Gremlins.SCAVENGER)
+    scavenger.x, scavenger.y = scavenger.cable_spot()
+    world.to_spawn = 0
+    run_until(world, lambda: scavenger.state is GremlinState.WALK_OUT,
+              max_seconds=SABOTAGE_TIME + SCAVENGE_WAIT + 0.5)
+    assert scavenger.carry is None
 
 
 def test_spawning_mixes_in_the_level_kinds(bus):

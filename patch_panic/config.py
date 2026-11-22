@@ -58,6 +58,7 @@ SHAKE_AMPLITUDE = 6                # pixels
 COMBO_WINDOW = 1.2                 # swats/zaps this close together build a combo
 COMBO_MAX = 5                      # highest score multiplier
 SABOTAGE_TIME = 2.5                # a saboteur chews a cable this long before it sparks
+SCAVENGE_WAIT = 6.0                # after chewing, a scavenger lingers this long for a disk to grab
 HONEYPOT_TIME = 6.0
 SWEEP_CLICKS = 3                   # Antivirus Sweep: number of clicks with a bigger reach
 SWEEP_RADIUS_SCALE = 2.0
@@ -128,6 +129,7 @@ class GremlinKind:
     hits: int = 1                    # swats needed
     splits: int = 0                  # sprinters it splits into when swatted
     sabotages: bool = False          # goes for a cable instead of a computer
+    scavenges: bool = False          # steals OS disks lying on the floor
 
 
 class Gremlins:
@@ -140,7 +142,9 @@ class Gremlins:
                            splits=2)
     SABOTEUR = GremlinKind("saboteur", "Saboteur", "Chews cables to start surges", first_level=13,
                            weight=0.2, sabotages=True)
-    ALL = (STANDARD, SPRINTER, ARMORED, SPLITTER, SABOTEUR)
+    SCAVENGER = GremlinKind("scavenger", "Scavenger", "Steals OS disks left on the floor", first_level=17,
+                            weight=0.2, sabotages=True, scavenges=True)
+    ALL = (STANDARD, SPRINTER, ARMORED, SPLITTER, SABOTEUR, SCAVENGER)
 
 
 # --- Save file -------------------------------------------------------------------
