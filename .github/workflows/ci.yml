@@ -1,0 +1,84 @@
+# Checks every push to main and every pull request:
+# lint, unit tests on all supported Python versions and on Windows/macOS,
+# and that the package builds, installs and launches.
+# (Standalone executables are built separately by build.yml on release tags.)
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch/PR cancels the run that's still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - name: pyflakes
+        run: python -m pyflakes patch_panic tests tools run_game.py
+
+  test:
+    name: test (${{ matrix.os }}, Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: windows-latest
+            python: "3.12"
+          - os: macos-latest
+            python: "3.12"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+      - name: Unit tests
+        run: python -m pytest -q
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Build wheel and source package
+        run: |
+          pip install build
+          python -m build
+          ls -la dist
+      - name: Install the wheel in a clean environment
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install dist/*.whl
+      - name: Check the installed package
+        run: |
+          cd /tmp   # make sure we test the installed copy, not the checkout
+          /tmp/venv/bin/python - <<'EOF'
+          from importlib.metadata import version
+          import patch_panic, patch_panic.sprites as sprites
+          pngs = list(sprites.ASSET_DIR.glob("*.png"))
+          print("version", version("patch-panic"), "| sprites", len(pngs))
+          assert version("patch-panic") == patch_panic.__version__
+          assert len(pngs) == len(sprites.build_all()), "sprite PNGs missing from the wheel"
+          EOF
+      - name: Launch the game headless
+        run: python tools/smoke_test.py /tmp/venv/bin/patch-panic 8
