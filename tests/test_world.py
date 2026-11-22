@@ -20,12 +20,12 @@ import random
 import pytest
 
 from patch_panic.config import (BLOAT, CARRIER_SPEED_FACTOR, COMBO_MAX, COMBO_WINDOW, DISK_SNAP_RADIUS, FRY_TIME,
-                                HITSTOP_TIME, PERFECT_SAFETY, SHAKE_TIME,
+                                HITSTOP_TIME, HONEYPOT_TIME, PERFECT_SAFETY, SABOTAGE_TIME, SHAKE_TIME,
                                 SURGE_WARNING_TIME, SWEEP_CLICKS, Gremlins, LevelConfig, Points)
 from patch_panic.effects import Effects
 from patch_panic.entities import Disk, GremlinState, Surge
 from patch_panic.events import Event, EventBus
-from patch_panic.powerups import AntivirusSweep, AutoPatch, Firewall, Rollback, SurgeGuard
+from patch_panic.powerups import AntivirusSweep, AutoPatch, Firewall, HoneypotLure, Rollback, SurgeGuard
 from patch_panic.world import Outcome, World
 
 
@@ -286,6 +286,17 @@ def test_rollback_sends_disks_home(world):
     assert not Rollback().is_available(world)
 
 
+def test_honeypot_lures_walking_gremlins_until_it_expires(world):
+    gremlin = walking_gremlin(world, world.computers[0])
+    HoneypotLure().apply(world)
+    honeypot = world.honeypot
+    assert honeypot.timer == HONEYPOT_TIME
+    run_until(world, lambda: (gremlin.x, gremlin.y) == honeypot.spot_for(gremlin), max_seconds=HONEYPOT_TIME)
+    assert gremlin.state is GremlinState.WALK_IN
+    run_until(world, lambda: world.honeypot is None)
+    run_until(world, lambda: gremlin.state is GremlinState.INSTALL)
+
+
 def test_powerup_appears_halfway_and_awards_points(world, bus):
     rec = Recorder(bus)
     world.to_spawn = world.config.gremlins // 2
@@ -397,6 +408,32 @@ def test_splitter_splits_into_sprinters(world, bus):
     assert len(kids) == Gremlins.SPLITTER.splits
     assert all(k.target is not None and k.target.targeted is k for k in kids)
     assert Event.GREMLIN_SPLIT in rec.names()
+
+
+def sabotaging(world):
+    cable = world.cables[0]
+    saboteur = world.spawn_saboteur(cable)
+    saboteur.x, saboteur.y = saboteur.cable_spot()
+    world.to_spawn = 0
+    world.update(0.01)
+    assert saboteur.state is GremlinState.SABOTAGE
+    return saboteur
+
+
+def test_saboteur_chews_a_cable_into_a_surge(world, bus):
+    rec = Recorder(bus)
+    saboteur = sabotaging(world)
+    run_until(world, lambda: world.surges, max_seconds=SABOTAGE_TIME + 0.1)
+    assert len(world.surges) == 1 and set((world.surges[0].src, world.surges[0].dst)) == set(saboteur.cable)
+    assert saboteur.state is GremlinState.WALK_OUT
+    assert Event.CABLE_SABOTAGED in rec.names()
+
+
+def test_swatting_a_saboteur_stops_the_surge(world):
+    saboteur = sabotaging(world)
+    world.click((saboteur.x, saboteur.y - 12))
+    world.update(SABOTAGE_TIME)
+    assert not world.surges
 
 
 def test_spawning_mixes_in_the_level_kinds(bus):

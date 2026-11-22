@@ -87,6 +87,8 @@ VARIANT_PALS = {
                 "f": (55, 58, 70), "h": (255, 214, 70)},
     "splitter": {"r": (240, 175, 50), "R": (170, 110, 20), "p": (255, 225, 130), "m": (110, 60, 10),
                  "f": (100, 60, 15)},
+    "saboteur": {"r": (100, 60, 135), "R": (62, 36, 88), "p": (150, 112, 188), "m": (235, 70, 70),
+                 "f": (42, 26, 60), "h": (235, 70, 70)},
 }
 ARMOR_CRACKS = [(8, 3), (9, 4), (10, 4), (10, 5), (12, 9), (13, 10)]  # (x, y) pixels in a 17-wide frame
 
@@ -308,6 +310,8 @@ def build_all():
     for prefix, colours in VARIANT_PALS.items():
         s.update(gremlin_set(prefix, {**GREMLIN_PAL, **colours}))
     s.update(gremlin_set("armored_cracked", {**GREMLIN_PAL, **VARIANT_PALS["armored"]}, cracked))
+    s["honeypot"] = grid_to_surface(COMPUTER, {**COMPUTER_PAL, "s": (255, 190, 60), "l": (255, 236, 170),
+                                               "g": (230, 190, 90), "G": (170, 125, 40)})
     for i, color in enumerate(OS_COLORS):
         s[f"computer_{i}"] = grid_to_surface(COMPUTER, {**COMPUTER_PAL, "s": color})
         s[f"logo_{i}"] = grid_to_surface(LOGOS[i], {"c": color, "C": shade(color, 0.6), "w": (250, 250, 255)})

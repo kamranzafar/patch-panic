@@ -68,6 +68,7 @@ SOUND_FOR_EVENT = {
     Event.GREMLIN_HIT: "clank",
     Event.GREMLIN_SPLIT: "split",
     Event.NEW_THREAT: "threat",
+    Event.CABLE_SABOTAGED: "zap",
     Event.ACHIEVEMENT_UNLOCKED: "powerup",
 }
 

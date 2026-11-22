@@ -101,6 +101,7 @@ class Computer:
 class GremlinState(Enum):
     WALK_IN = auto()
     INSTALL = auto()
+    SABOTAGE = auto()  # a saboteur chewing a cable
     WALK_OUT = auto()
     DYING = auto()
 
@@ -118,6 +119,7 @@ class Gremlin:
         self.hp = kind.hits           # swats left
         self.state = GremlinState.WALK_IN
         self.target: Computer | None = None
+        self.cable: tuple[Computer, Computer] | None = None  # a saboteur's target
         self.carry: int | None = None  # stolen OS kind
         self.timer = 0.0
         self.facing = 1
@@ -131,6 +133,18 @@ class Gremlin:
     @property
     def is_damaged(self) -> bool:
         return self.hp < self.kind.hits
+
+    def assign_cable(self, cable: tuple[Computer, Computer]) -> None:
+        self.cable = cable
+
+    def cable_spot(self) -> Point:
+        """Where a saboteur stands to chew its cable: the middle of it."""
+        (ax, ay), (bx, by) = (c.cable_anchor() for c in self.cable)
+        return (ax + bx) / 2, (ay + by) / 2
+
+    def start_sabotage(self) -> None:
+        self.state = GremlinState.SABOTAGE
+        self.timer = 0.0
 
     def assign(self, computer: Computer) -> None:
         self.target = computer
@@ -268,3 +282,22 @@ class PowerUp:
     def hit(self, pos: Point) -> bool:
         return distance(pos, (self.x, self.y)) < self.HIT_RADIUS
 
+
+class Honeypot:
+    """A decoy computer that lures walking gremlins away for a while."""
+
+    LURE_RADIUS = (34, 16)  # gremlins idle on an ellipse around it
+
+    def __init__(self, x: float, y: float, timer: float) -> None:
+        self.x, self.y = x, y
+        self.timer = timer
+
+    def spot_for(self, gremlin: Gremlin) -> Point:
+        """Each gremlin waits at its own place around the decoy."""
+        rx, ry = self.LURE_RADIUS
+        return self.x + math.cos(gremlin.phase) * rx, self.y + 30 + math.sin(gremlin.phase) * ry
+
+    def advance(self, dt: float) -> bool:
+        """Count down; returns False once it has expired."""
+        self.timer -= dt
+        return self.timer > 0
