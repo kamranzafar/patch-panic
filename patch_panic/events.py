@@ -29,8 +29,14 @@ from typing import Callable
 
 class Event(Enum):
     SCORED = auto()              # points, x, y
-    GREMLIN_SQUASHED = auto()    # x, y
+    COMBO = auto()               # count, x, y
+    CLICK_MISSED = auto()        # x, y
+    CLOSE_CALL = auto()          # x, y
+    GREMLIN_SQUASHED = auto()    # x, y, carrier, kind
+    GREMLIN_HIT = auto()         # x, y (an armored gremlin lost its armour)
+    GREMLIN_SPLIT = auto()       # x, y
     GREMLIN_ZAPPED = auto()      # x, y
+    NEW_THREAT = auto()          # kind (first appearance of a gremlin kind)
     COMPUTER_INFECTED = auto()   # computer
     COMPUTER_FRIED = auto()      # computer
     OS_EJECTED = auto()          # computer
@@ -38,11 +44,15 @@ class Event(Enum):
     DISK_PICKED_UP = auto()      # disk
     DISK_DROPPED = auto()        # disk
     DISK_REJECTED = auto()       # computer, reason
-    SURGE_ZAPPED = auto()        # x, y
+    SURGE_WARNING = auto()       # src, dst
+    SURGE_ZAPPED = auto()        # x, y, chained
     SURGE_CLEARED = auto()       # x, y
     POWERUP_COLLECTED = auto()   # x, y, text
+    LEVEL_STARTED = auto()       # level
+    PERFECT_LEVEL = auto()       # bonus
     LEVEL_CLEARED = auto()       # bonus
     GAME_OVER = auto()           # score
+    ACHIEVEMENT_UNLOCKED = auto()  # achievement
 
 
 Handler = Callable[..., None]
@@ -54,6 +64,10 @@ class EventBus:
 
     def subscribe(self, event: Event, handler: Handler) -> None:
         self._handlers[event].append(handler)
+
+    def unsubscribe(self, event: Event, handler: Handler) -> None:
+        if handler in self._handlers[event]:
+            self._handlers[event].remove(handler)
 
     def emit(self, event: Event, **data) -> None:
         for handler in list(self._handlers[event]):

@@ -21,7 +21,8 @@ in terms of names, and balancing the game only means editing this file.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from enum import Enum
 
 # --- Window -------------------------------------------------------------------
 WIDTH, HEIGHT = 960, 640
@@ -29,6 +30,7 @@ HUD_HEIGHT = 40
 FPS = 60
 MAX_FRAME_TIME = 0.05  # clamp dt so a stalled frame can't teleport objects
 TITLE = "Patch Panic"
+COPYRIGHT = "© 2026 Kamran Zafar. Free software under the GNU GPL v3 or later."
 
 # --- Operating systems ----------------------------------------------------------
 OS_NAMES = ("Orbix", "Delta", "Cubix", "Prism")
@@ -48,11 +50,24 @@ BANNER_TIME = 2.0
 SWAT_FLASH_TIME = 0.12
 LEVEL_DONE_CLICK_DELAY = 0.6
 GAME_OVER_CLICK_DELAY = 1.0
+SURGE_WARNING_TIME = 0.6           # a cable pulses this long before its surge appears
+INSTALL_WARN_TIME = 0.5            # install ring turns red when this much time is left
+HITSTOP_TIME = 0.06                # world pauses briefly on a satisfying swat
+SHAKE_TIME = 0.3
+SHAKE_AMPLITUDE = 6                # pixels
+COMBO_WINDOW = 1.2                 # swats/zaps this close together build a combo
+COMBO_MAX = 5                      # highest score multiplier
+SWEEP_CLICKS = 3                   # Antivirus Sweep: number of clicks with a bigger reach
+SWEEP_RADIUS_SCALE = 2.0
 
 # --- Layout -------------------------------------------------------------------------
 GRID_COLS, GRID_ROWS = 6, 3        # computers are placed in jittered grid cells
 CABLES_PER_COMPUTER = 2            # each computer links to its N nearest neighbours
 AUTO_PATCH_MAX = 2                 # computers restored by the Auto-Patch power-up
+DISK_SNAP_RADIUS = 60              # a dropped disk snaps to a matching computer this close
+CARRIER_SPEED_FACTOR = 1.25        # a gremlin carrying a stolen OS runs for it
+LATE_CATCH_FRACTION = 1 / 3        # catching a carrier in the last third of its escape is a close call
+PERFECT_SAFETY = 1                 # a perfect level lets the next one end with this many fewer clean machines
 
 
 class Points:
@@ -62,6 +77,8 @@ class Points:
     RESTORE_OS = 50
     POWERUP_PER_LEVEL = 100
     CLEAN_PER_LEVEL = 10
+    PERFECT_PER_LEVEL = 50
+    LATE_CATCH = 20
 
 
 class Color:
@@ -82,6 +99,80 @@ class Color:
     SURGE_PATH = (105, 95, 40)
     CABLE = (55, 62, 82)
     ICE = (140, 210, 255)
+    INSTALL_RING = (255, 214, 70)
+    INSTALL_RING_BACK = (40, 40, 52)
+    SNAP_HIGHLIGHT = (240, 240, 245)
+    COMBO = (255, 140, 66)
+    SPLITTER = (240, 175, 50)
+    BUTTON_HOT = (60, 52, 30)
+    BUTTON_SELECTED = (36, 40, 58)
+    LOCKED = (95, 100, 118)
+
+
+# --- Gremlin kinds -------------------------------------------------------------------
+@dataclass(frozen=True)
+class GremlinKind:
+    """What makes one kind of gremlin different. `name` is also its sprite prefix."""
+
+    name: str
+    label: str
+    hint: str = ""                   # shown in the banner the first time it appears
+    first_level: int = 1             # level it starts to appear in
+    weight: float = 1.0              # spawn chance relative to the other kinds in a level
+    speed_factor: float = 1.0
+    hit_radius_factor: float = 1.0
+    hits: int = 1                    # swats needed
+    splits: int = 0                  # sprinters it splits into when swatted
+
+
+class Gremlins:
+    STANDARD = GremlinKind("gremlin", "Gremlin")
+    SPRINTER = GremlinKind("sprinter", "Sprinter", "Fast but fragile", first_level=3, weight=0.35,
+                           speed_factor=1.5, hit_radius_factor=0.8)
+    ARMORED = GremlinKind("armored", "Armored gremlin", "Takes two swats", first_level=7, weight=0.3,
+                          speed_factor=0.85, hits=2)
+    SPLITTER = GremlinKind("splitter", "Splitter", "Splits in two when swatted", first_level=11, weight=0.25,
+                           splits=2)
+    ALL = (STANDARD, SPRINTER, ARMORED, SPLITTER)
+
+
+# --- Save file -------------------------------------------------------------------
+LEADERBOARD_SIZE = 10
+INITIALS_LENGTH = 3
+DEFAULT_INITIALS = "AAA"
+
+
+class GameMode(Enum):
+    CLASSIC = "Classic"
+    DAILY = "Daily"
+    TUTORIAL = "Tutorial"
+
+    @property
+    def label(self) -> str:
+        return self.value
+
+
+class Difficulty(Enum):
+    """Preset that scales `LevelConfig`: (label, speed, timing, count).
+
+    `speed` multiplies gremlin and surge speed, `timing` multiplies the spawn,
+    install and surge intervals (bigger is easier), `count` multiplies the
+    number of gremlins per level.
+    """
+
+    RELAXED = ("Relaxed", 0.8, 1.25, 0.8)
+    NORMAL = ("Normal", 1.0, 1.0, 1.0)
+    FRANTIC = ("Frantic", 1.2, 0.8, 1.25)
+
+    def __init__(self, label: str, speed: float, timing: float, count: float) -> None:
+        self.label = label
+        self.speed = speed
+        self.timing = timing
+        self.count = count
+
+    def next(self) -> Difficulty:
+        members = list(Difficulty)
+        return members[(members.index(self) + 1) % len(members)]
 
 
 @dataclass(frozen=True)
@@ -99,11 +190,16 @@ class LevelConfig:
     max_surges: int
     surge_speed: float
     surge_chain: float  # probability a surge jumps on to the next cable
+    kinds: tuple[GremlinKind, ...] = (Gremlins.STANDARD,)  # gremlin kinds that can appear
 
     @classmethod
-    def for_level(cls, level: int) -> LevelConfig:
+    def for_level(cls, level: int, difficulty: Difficulty = Difficulty.NORMAL) -> LevelConfig:
         if level < 1:
             raise ValueError("level must be >= 1")
+        return cls._base(level).scaled(difficulty)
+
+    @classmethod
+    def _base(cls, level: int) -> LevelConfig:
         return cls(
             level=level,
             computers=min(5 + level, 16),
@@ -116,4 +212,24 @@ class LevelConfig:
             max_surges=1 + level // 3,
             surge_speed=min(45 + 6 * level, 130),
             surge_chain=min(0.5, 0.1 + 0.04 * level),
+            kinds=tuple(k for k in Gremlins.ALL if k.first_level <= level),
+        )
+
+    @classmethod
+    def tutorial(cls) -> LevelConfig:
+        """A small, slow level; the tutorial spawns everything itself."""
+        return cls(level=1, computers=4, gremlins=0, max_alive=3, spawn_interval=1.0, gremlin_speed=70,
+                   install_time=6.0, surge_interval=10.0, max_surges=1, surge_speed=40, surge_chain=0.0)
+
+    def scaled(self, difficulty: Difficulty) -> LevelConfig:
+        if difficulty is Difficulty.NORMAL:
+            return self
+        return replace(
+            self,
+            gremlins=max(1, round(self.gremlins * difficulty.count)),
+            spawn_interval=self.spawn_interval * difficulty.timing,
+            gremlin_speed=self.gremlin_speed * difficulty.speed,
+            install_time=self.install_time * difficulty.timing,
+            surge_interval=self.surge_interval * difficulty.timing,
+            surge_speed=self.surge_speed * difficulty.speed,
         )

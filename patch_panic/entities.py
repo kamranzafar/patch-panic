@@ -26,7 +26,7 @@ from enum import Enum, auto
 
 import pygame
 
-from .config import BLOAT, DISK_LIFETIME, HEIGHT, HUD_HEIGHT, WIDTH
+from .config import BLOAT, DISK_LIFETIME, HEIGHT, HUD_HEIGHT, WIDTH, GremlinKind, Gremlins
 
 Point = tuple[float, float]
 
@@ -109,20 +109,28 @@ class Gremlin:
     HIT_RADIUS = 24
     BODY_OFFSET_Y = -12  # sprite body centre relative to the feet position
 
-    def __init__(self, x: float, y: float, speed: float, phase: float = 0.0) -> None:
+    def __init__(self, x: float, y: float, speed: float, phase: float = 0.0,
+                 kind: GremlinKind = Gremlins.STANDARD) -> None:
         self.x, self.y = x, y
         self.speed = speed
         self.phase = phase            # animation offset so gremlins don't march in sync
+        self.kind = kind
+        self.hp = kind.hits           # swats left
         self.state = GremlinState.WALK_IN
         self.target: Computer | None = None
         self.carry: int | None = None  # stolen OS kind
         self.timer = 0.0
         self.facing = 1
         self.exit: Point | None = None
+        self.exit_distance = 0.0      # how far it had to run when it started leaving
 
     @property
     def is_alive(self) -> bool:
         return self.state is not GremlinState.DYING
+
+    @property
+    def is_damaged(self) -> bool:
+        return self.hp < self.kind.hits
 
     def assign(self, computer: Computer) -> None:
         self.target = computer
@@ -141,6 +149,14 @@ class Gremlin:
     def leave(self, exit_point: Point) -> None:
         self.state = GremlinState.WALK_OUT
         self.exit = exit_point
+        self.exit_distance = distance((self.x, self.y), exit_point)
+
+    @property
+    def escape_progress(self) -> float:
+        """0 when it starts leaving, 1 at the exit."""
+        if self.exit is None or self.exit_distance <= 0:
+            return 0.0
+        return 1 - distance((self.x, self.y), self.exit) / self.exit_distance
 
     def die(self) -> None:
         self.release_target()
@@ -161,8 +177,9 @@ class Gremlin:
         self.y += dy / d * step
         return False
 
-    def hit(self, pos: Point) -> bool:
-        return distance(pos, (self.x, self.y + self.BODY_OFFSET_Y)) < self.HIT_RADIUS
+    def hit(self, pos: Point, reach: float = 1.0) -> bool:
+        radius = self.HIT_RADIUS * self.kind.hit_radius_factor * reach
+        return distance(pos, (self.x, self.y + self.BODY_OFFSET_Y)) < radius
 
 
 class Surge:
@@ -170,10 +187,11 @@ class Surge:
 
     HIT_RADIUS = 18
 
-    def __init__(self, src: Computer, dst: Computer, progress: float, speed: float) -> None:
+    def __init__(self, src: Computer, dst: Computer, progress: float, speed: float, chained: bool = False) -> None:
         self.src, self.dst = src, dst
         self.progress = progress  # 0 at src, 1 at dst
         self.speed = speed
+        self.chained = chained    # jumped on from a machine it fried
         self.length = max(1.0, distance((src.x, src.y), (dst.x, dst.y)))
 
     @property
@@ -186,8 +204,22 @@ class Surge:
         self.progress += self.speed * dt / self.length
         return self.progress >= 1.0
 
-    def hit(self, pos: Point) -> bool:
-        return distance(pos, self.pos) < self.HIT_RADIUS
+    def hit(self, pos: Point, reach: float = 1.0) -> bool:
+        return distance(pos, self.pos) < self.HIT_RADIUS * reach
+
+
+class SurgeWarning:
+    """A cable that is about to carry a surge; shown briefly so the player can react."""
+
+    def __init__(self, src: Computer, dst: Computer, progress: float, timer: float) -> None:
+        self.src, self.dst = src, dst
+        self.progress = progress  # where on the cable the surge will appear
+        self.timer = timer        # seconds until the surge appears
+
+    def advance(self, dt: float) -> bool:
+        """Count down; returns True when the surge should appear."""
+        self.timer -= dt
+        return self.timer <= 0
 
 
 class Disk:
@@ -235,3 +267,4 @@ class PowerUp:
 
     def hit(self, pos: Point) -> bool:
         return distance(pos, (self.x, self.y)) < self.HIT_RADIUS
+

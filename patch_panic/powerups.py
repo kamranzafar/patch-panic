@@ -26,7 +26,7 @@ import random
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from .config import AUTO_PATCH_MAX, FREEZE_TIME, SHIELD_TIME
+from .config import AUTO_PATCH_MAX, FREEZE_TIME, SHIELD_TIME, SWEEP_CLICKS
 
 if TYPE_CHECKING:
     from .world import World
@@ -66,7 +66,22 @@ class AutoPatch(PowerUpEffect):
         return f"AUTO-PATCH! {len(fixed)} restored"
 
 
-ALL_POWERUPS: tuple[PowerUpEffect, ...] = (Firewall(), SurgeGuard(), AutoPatch())
+class AntivirusSweep(PowerUpEffect):
+    def apply(self, world: World) -> str:
+        world.activate_sweep(SWEEP_CLICKS)
+        return f"ANTIVIRUS SWEEP! {SWEEP_CLICKS} power swats"
+
+
+class Rollback(PowerUpEffect):
+    def is_available(self, world: World) -> bool:
+        disks = world.disks + ([world.dragging] if world.dragging else [])
+        return any(c.accepts(d.kind) for d in disks for c in world.computers)
+
+    def apply(self, world: World) -> str:
+        return f"ROLLBACK! {world.rollback_disks()} restored"
+
+
+ALL_POWERUPS: tuple[PowerUpEffect, ...] = (Firewall(), SurgeGuard(), AutoPatch(), AntivirusSweep(), Rollback())
 
 
 def choose_powerup(world: World, rng: random.Random) -> PowerUpEffect:

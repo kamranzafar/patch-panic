@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Render the application icon (512x512 PNG) from the gremlin sprite.
+"""Render the application icon (512x512 PNG) from the pixel-art icon in sprites.py.
 
 Usage: python tools/make_icon.py [output.png]   (default: build/icon.png)
 PyInstaller converts the PNG to .ico / .icns when Pillow is installed.
@@ -36,14 +36,10 @@ SIZE = 512
 
 def main(out: Path) -> None:
     pygame.init()
-    gremlin = sprites.build_all()["gremlin_walk0"]
-    scale = (SIZE * 3 // 4) // max(gremlin.get_size())
-    gremlin = pygame.transform.scale(gremlin, (gremlin.get_width() * scale, gremlin.get_height() * scale))
-
+    art = sprites.build_icon()
+    art = sprites.scale(art, SIZE // sprites.ICON_SIZE)  # whole-pixel scale keeps it crisp
     icon = pygame.Surface((SIZE, SIZE), pygame.SRCALPHA)
-    pygame.draw.rect(icon, (20, 24, 33), icon.get_rect(), border_radius=SIZE // 5)
-    pygame.draw.rect(icon, (255, 140, 66), icon.get_rect(), width=SIZE // 32, border_radius=SIZE // 5)
-    icon.blit(gremlin, gremlin.get_rect(center=(SIZE // 2, SIZE // 2 + SIZE // 32)))
+    icon.blit(art, art.get_rect(center=(SIZE // 2, SIZE // 2)))
 
     out.parent.mkdir(parents=True, exist_ok=True)
     pygame.image.save(icon, str(out))

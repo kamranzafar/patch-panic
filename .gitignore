@@ -29,3 +29,6 @@ htmlcov/
 Thumbs.db
 
 .docs/
+
+# graphify knowledge graph (generated locally)
+graphify-out/

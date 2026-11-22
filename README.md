@@ -21,7 +21,8 @@ onto the computer whose colour stripe matches. Power surges also race along the
 network cables: click a spark before it reaches a machine, or the machine fries,
 reboots, and ejects its OS disk, which you have to drag back before it expires.
 Surges can jump on down the network, and a gremlin caught mid-install on a fried
-machine gets zapped too.
+machine gets zapped too. A ring fills up around every installing gremlin, and a
+cable flashes just before a surge appears on it, so you can see what's coming.
 
 Halfway through each level a golden patch flies across the screen. Click it for
 bonus points plus a random power-up:
@@ -29,9 +30,33 @@ bonus points plus a random power-up:
 - **Firewall** – all gremlins freeze for 5 seconds
 - **Surge Guard** – clears every spark and blocks new ones for 8 seconds
 - **Auto-Patch** – instantly restores up to 2 broken computers
+- **Antivirus Sweep** – your next 3 swats reach twice as far
+- **Rollback** – every useful OS disk on the floor (or in your hand) flies home
 
-Keep at least half your machines
-clean to survive each level.
+Keep at least half your machines clean to survive each level. Finish a level
+with every machine clean for a **perfect bonus** and a safety net: the next
+level lets you finish with one fewer clean machine.
+
+Each kind of gremlin has its own colour, and new kinds join in as the levels go on:
+
+| Gremlin   | Colour                     | From level | Behaviour                                     |
+|-----------|----------------------------|-----------:|-----------------------------------------------|
+| Gremlin   | Pink                       | 1          | Installs BloatOS and steals the OS disk       |
+| Sprinter  | Cyan                       | 3          | Fast and small, so harder to hit              |
+| Armored   | Steel grey, gold horns     | 7          | Takes two swats (the first cracks its armour) |
+| Splitter  | Amber                      | 11         | Splits into two sprinters when swatted        |
+
+## Modes
+
+- **Classic** – endless levels at the difficulty chosen in Settings
+  (Relaxed, Normal or Frantic).
+- **Daily** – everyone gets the same layouts for the day, always on Normal, so
+  scores compare.
+- **Tutorial** – a short guided level: swat, rescue a disk, zap a surge, grab
+  the patch.
+
+Settings also has a colourblind mode (a shape on every OS disk and stripe),
+screen shake, pausing when the window loses focus, and rebindable keys.
 
 Runs on macOS, Windows and Linux. Graphics are pixel-art sprites (see below);
 sound effects are synthesised at startup.
@@ -55,36 +80,51 @@ python3 -m venv .venv
 | Input        | Action                                    |
 |--------------|-------------------------------------------|
 | Left click   | Swat a gremlin / zap a surge / drag a disk |
-| P            | Pause                                     |
-| M            | Mute                                      |
-| F / F11      | Toggle fullscreen                         |
+| P            | Pause (rebindable)                        |
+| M            | Mute (rebindable)                         |
+| F / F11      | Toggle fullscreen (F is rebindable)       |
+| 1 – 5        | Title menu: Classic, Daily, Tutorial, Scores, Settings |
 | Esc          | Back to title (quit from title)           |
 
 ## Scoring
 
 - Swat a gremlin: +10 (+25 if it was carrying a stolen OS)
 - Zap a power surge: +15
+- **Combo**: swats and zaps less than 1.2 s apart multiply their points
+  (×2, ×3 … up to ×5); a missed click breaks the combo
+- Close call: +20 for catching a disk thief in the last third of its escape
 - Grab the golden patch: +100 × level
 - Restore an OS to its computer: +50
 - End of level: +10 × level for each clean computer
+- Perfect level (every computer clean): +50 × level
 
-High score is saved to `~/.patch_panic.json`.
+The top-10 leaderboard (with arcade initials), unlocked achievements and your
+settings are saved to `~/.patch_panic.json`. A version 1.0 file (just a high
+score) is upgraded automatically.
 
 ## Project layout
 
 ```
 patch_panic/
-  app.py       App: window, main loop, switches between scenes
-  scenes.py    Title / Play / Level complete / Game over screens   (State pattern)
-  world.py     World: all game rules for one level; emits events
-  entities.py  Computer, Gremlin, Surge, Disk, PowerUp (state + behaviour, no drawing)
-  powerups.py  Firewall / SurgeGuard / AutoPatch                     (Strategy pattern)
-  events.py    EventBus + Event enum                                 (Observer pattern)
-  audio.py     Synthesised sounds, subscribed to game events
-  effects.py   Particles, score popups, banner, subscribed to game events
-  render.py    Renderer: draws everything, never changes game state
-  config.py    Constants, colours, scoring and LevelConfig (difficulty per level)
-  storage.py   High score file
+  app.py           App: window, main loop, switches between scenes
+  scenes.py        Title / Settings / Scores / Play / Level complete / Initials / Game over
+                   screens                                                (State pattern)
+  tutorial.py      Tutorial scene and its steps                           (State pattern)
+  world.py         World: all game rules for one level; emits events
+  entities.py      Computer, Gremlin, Surge, Disk, PowerUp (state + behaviour, no drawing)
+  powerups.py      Firewall / SurgeGuard / AutoPatch / AntivirusSweep / Rollback
+                                                                          (Strategy pattern)
+  events.py        EventBus + Event enum                                  (Observer pattern)
+  audio.py         Synthesised sounds, subscribed to game events
+  effects.py       Particles, popups, banner, shake, hit-stop, subscribed to game events
+  stats.py         RunStats: per-game numbers, subscribed to game events
+  achievements.py  Achievement list + tracker, subscribed to game events
+  render.py        Renderer: draws everything, never changes game state
+  config.py        Constants, colours, scoring, gremlin kinds, difficulty presets and
+                   LevelConfig (difficulty per level)
+  run.py           Run: mode, difficulty and seed of the current game
+  settings.py      Player settings and key bindings
+  storage.py       Save file: leaderboard, achievements, settings
   sprites.py   Pixel-art definitions + PNG export/loading
   assets/sprites/*.png
 tests/         Unit tests for the game rules (no window needed)
@@ -95,13 +135,17 @@ tools/         make_readme_header.py: regenerates the README header (.github/hea
 ```
 
 How it fits together: `World` decides what happens and announces it on the
-`EventBus` (e.g. `Event.COMPUTER_FRIED`). `SoundBank` and `Effects` subscribe
-to those events, and `Renderer` draws the current state. So the rules never
+`EventBus` (e.g. `Event.COMPUTER_FRIED`). `SoundBank`, `Effects`, `RunStats`
+and `AchievementTracker` subscribe to those events, and `Renderer` draws the
+current state. So the rules never
 touch pygame drawing or audio, and they can be unit-tested directly.
 
-To tune difficulty, edit `LevelConfig.for_level()` in `config.py`. To add a
-power-up, subclass `PowerUpEffect` in `powerups.py` and add it to
-`ALL_POWERUPS`.
+To tune difficulty, edit `LevelConfig.for_level()` (and the `Difficulty`
+presets) in `config.py`. To add a power-up, subclass `PowerUpEffect` in
+`powerups.py` and add it to `ALL_POWERUPS`. To add a gremlin kind, add a
+`GremlinKind` to `Gremlins` in `config.py` plus its colours in
+`sprites.VARIANT_PALS`. To add an achievement, add an entry to `ACHIEVEMENTS`
+in `achievements.py`.
 
 ## Tests
 

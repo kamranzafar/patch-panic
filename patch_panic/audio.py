@@ -26,6 +26,7 @@ import random
 
 import pygame
 
+from .config import COMBO_MAX
 from .events import Event, EventBus
 
 # name -> (segments, volume). A segment is (start_hz, end_hz, seconds[, noise]).
@@ -41,6 +42,13 @@ SOUND_DEFS = {
     "powerup": ([(660, 660, 0.06), (880, 880, 0.06), (1100, 1100, 0.06), (1320, 1760, 0.15)], 0.25),
     "zap": ([(1200, 2600, 0.09)], 0.2),
     "fry": ([(4000, 600, 0.35, True)], 0.3),
+    "warn": ([(300, 340, 0.07), (300, 340, 0.07)], 0.12),
+    "clank": ([(1500, 1400, 0.03, True), (900, 700, 0.06)], 0.22),
+    "split": ([(300, 600, 0.05), (300, 600, 0.05)], 0.2),
+    "threat": ([(220, 220, 0.12), (165, 165, 0.12), (220, 220, 0.12), (165, 165, 0.2)], 0.22),
+    "perfect": ([(784, 784, 0.08), (988, 988, 0.08), (1175, 1175, 0.08), (1568, 1568, 0.25)], 0.3),
+    # combo2..comboN: a blip that climbs a semitone-ish step with each link
+    **{f"combo{n}": ([(700 * 1.12 ** n, 900 * 1.12 ** n, 0.06)], 0.18) for n in range(2, COMBO_MAX + 1)},
 }
 
 SOUND_FOR_EVENT = {
@@ -55,6 +63,12 @@ SOUND_FOR_EVENT = {
     Event.POWERUP_COLLECTED: "powerup",
     Event.SURGE_ZAPPED: "zap",
     Event.COMPUTER_FRIED: "fry",
+    Event.SURGE_WARNING: "warn",
+    Event.PERFECT_LEVEL: "perfect",
+    Event.GREMLIN_HIT: "clank",
+    Event.GREMLIN_SPLIT: "split",
+    Event.NEW_THREAT: "threat",
+    Event.ACHIEVEMENT_UNLOCKED: "powerup",
 }
 
 MIXER_SETTINGS = dict(frequency=22050, size=-16, channels=1, buffer=512)
@@ -105,3 +119,4 @@ class SoundBank:
     def connect(self, bus: EventBus) -> None:
         for event, name in SOUND_FOR_EVENT.items():
             bus.subscribe(event, lambda _name=name, **_: self.play(_name))
+        bus.subscribe(Event.COMBO, lambda count, **_: self.play(f"combo{count}"))

@@ -24,6 +24,7 @@ with the same name exists in assets/sprites/ it is used instead -- so artists
 can replace any sprite by editing/dropping in a PNG (keep the 1x pixel size;
 sprites are scaled up with nearest-neighbour filtering).
 """
+import math
 import random
 from pathlib import Path
 
@@ -76,6 +77,38 @@ GREMLIN_SQUASHED = [
     "kRRrrrrrrrrrrrRRk",
     ".kkkkkkkkkkkkkkk.",
 ]
+
+
+# Other gremlin kinds reuse the same pixels with their own colours.
+VARIANT_PALS = {
+    "sprinter": {"r": (60, 190, 220), "R": (25, 115, 150), "p": (160, 235, 250), "m": (15, 60, 85),
+                 "f": (15, 70, 95)},
+    "armored": {"r": (150, 156, 172), "R": (92, 98, 114), "p": (215, 220, 232), "m": (60, 64, 76),
+                "f": (55, 58, 70), "h": (255, 214, 70)},
+    "splitter": {"r": (240, 175, 50), "R": (170, 110, 20), "p": (255, 225, 130), "m": (110, 60, 10),
+                 "f": (100, 60, 15)},
+}
+ARMOR_CRACKS = [(8, 3), (9, 4), (10, 4), (10, 5), (12, 9), (13, 10)]  # (x, y) pixels in a 17-wide frame
+
+
+def cracked(rows):
+    grid = [list(r) for r in rows]
+    for x, y in ARMOR_CRACKS:
+        if grid[y][x] != ".":
+            grid[y][x] = "k"
+    return ["".join(r) for r in grid]
+
+
+def gremlin_set(prefix, palette, transform=lambda rows: rows):
+    """All animation frames for one gremlin kind, named `{prefix}_{pose}{n}`."""
+    frames = {
+        "walk0": gremlin_frame("stride"), "walk1": gremlin_frame("close"),
+        "type0": gremlin_frame("stand", "type", 8), "type1": gremlin_frame("stand", "type", 9),
+        "carry0": gremlin_frame("stride", "carry"), "carry1": gremlin_frame("close", "carry"),
+    }
+    sprites = {f"{prefix}_{name}": grid_to_surface(transform(rows), palette) for name, rows in frames.items()}
+    sprites[f"{prefix}_squashed"] = grid_to_surface(GREMLIN_SQUASHED, palette)
+    return sprites
 
 
 def gremlin_frame(legs, arms=None, arm_row=8):
@@ -137,6 +170,17 @@ LOGO_BLOAT = ["..ggggg..", ".ggggggg.", "gkgkgkgkg", "ggkgggkgg", "gkgkgkgkg",
 BLOAT_PAL = {"g": (140, 195, 45), "G": (70, 110, 20), "k": (15, 20, 5)}
 BOLT = ["..yy.", ".yy..", ".yy..", "yyyyy", "..yy.", ".yy..", ".y...", "y...."]
 NO_OS = [".rrr.", "r...r", "....r", "..rr.", "..r..", ".....", "..r.."]
+
+# --------------------------------------------------------------------------
+# Colourblind glyphs (5 x 5, outlined): one shape per OS, echoing its logo
+# --------------------------------------------------------------------------
+OS_GLYPHS = [
+    [".www.", "w...w", "w...w", "w...w", ".www."],   # Orbix: ring
+    ["..w..", ".w.w.", ".w.w.", "w...w", "wwwww"],   # Delta: triangle
+    ["wwwww", "w...w", "w...w", "w...w", "wwwww"],   # Cubix: square
+    ["..w..", ".w.w.", "w...w", ".w.w.", "..w.."],   # Prism: diamond
+]
+GLYPH_PAL = {"w": (250, 250, 255), "k": (12, 12, 18)}
 
 # --------------------------------------------------------------------------
 # OS disk (11 x 11). 's' = OS colour
@@ -260,17 +304,15 @@ def floor_tile():
 def build_all():
     """Return {name: 1x Surface} for every sprite."""
     s = {}
-    s["gremlin_walk0"] = grid_to_surface(gremlin_frame("stride"), GREMLIN_PAL)
-    s["gremlin_walk1"] = grid_to_surface(gremlin_frame("close"), GREMLIN_PAL)
-    s["gremlin_type0"] = grid_to_surface(gremlin_frame("stand", "type", 8), GREMLIN_PAL)
-    s["gremlin_type1"] = grid_to_surface(gremlin_frame("stand", "type", 9), GREMLIN_PAL)
-    s["gremlin_carry0"] = grid_to_surface(gremlin_frame("stride", "carry"), GREMLIN_PAL)
-    s["gremlin_carry1"] = grid_to_surface(gremlin_frame("close", "carry"), GREMLIN_PAL)
-    s["gremlin_squashed"] = grid_to_surface(GREMLIN_SQUASHED, GREMLIN_PAL)
+    s.update(gremlin_set("gremlin", GREMLIN_PAL))
+    for prefix, colours in VARIANT_PALS.items():
+        s.update(gremlin_set(prefix, {**GREMLIN_PAL, **colours}))
+    s.update(gremlin_set("armored_cracked", {**GREMLIN_PAL, **VARIANT_PALS["armored"]}, cracked))
     for i, color in enumerate(OS_COLORS):
         s[f"computer_{i}"] = grid_to_surface(COMPUTER, {**COMPUTER_PAL, "s": color})
         s[f"logo_{i}"] = grid_to_surface(LOGOS[i], {"c": color, "C": shade(color, 0.6), "w": (250, 250, 255)})
         s[f"disk_{i}"] = grid_to_surface(DISK, {**DISK_PAL, "s": color})
+        s[f"glyph_{i}"] = grid_to_surface(outlined(OS_GLYPHS[i], "k"), GLYPH_PAL)
     s["logo_bloat"] = grid_to_surface(LOGO_BLOAT, BLOAT_PAL)
     static_pal = {"a": (18, 18, 26), "b": (45, 45, 58), "c": (120, 120, 140)}
     s["static0"] = grid_to_surface(static_frame(1), static_pal)
@@ -290,6 +332,61 @@ def build_all():
     s["floor"] = grid_to_surface(floor_tile(), {"L": (24, 27, 38), "b": (40, 46, 62),
                                                 "a": (33, 38, 52), "r": (58, 64, 84)})
     return s
+
+
+# --------------------------------------------------------------------------
+# App icon (24 x 24): the gremlin on an arcade sunburst. One subject, so it
+# still reads at 16-32 px.
+# --------------------------------------------------------------------------
+ICON_SIZE = 24
+ICON_CORNER = 5
+ICON_WINDOW_SCALE = 5                      # window/taskbar icon: 120 x 120
+ICON_RAYS = ((70, 32, 112), (46, 21, 80))  # alternating sunburst sectors (subtle)
+ICON_EDGE = (16, 10, 30)                   # rays fade to this towards the rim
+ICON_BORDER = (255, 140, 66)
+
+
+def icon_mask():
+    """Rows of the rounded-square silhouette: '#' inside, 'o' on the border."""
+    n, r = ICON_SIZE, ICON_CORNER
+
+    def inside(x, y):
+        cx = min(max(x, r - 0.5), n - r - 0.5)
+        cy = min(max(y, r - 0.5), n - r - 0.5)
+        return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+
+    rows = []
+    for y in range(n):
+        row = ""
+        for x in range(n):
+            if not inside(x, y):
+                row += "."
+            elif not all(inside(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                row += "o"
+            else:
+                row += "#"
+        rows.append(row)
+    return rows
+
+
+def build_icon():
+    """Return the 1x icon surface (scale it with nearest-neighbour)."""
+    n = ICON_SIZE
+    icon = pygame.Surface((n, n), pygame.SRCALPHA)
+    cx, cy = n / 2, n / 2
+    for y, row in enumerate(icon_mask()):
+        for x, ch in enumerate(row):
+            if ch == "o":
+                icon.set_at((x, y), ICON_BORDER)
+            elif ch == "#":
+                angle = math.atan2(y + 0.5 - cy, x + 0.5 - cx)
+                ray = ICON_RAYS[int((angle + math.pi) / (math.tau / 12)) % 2]
+                fade = min(1.0, math.hypot(x + 0.5 - cx, y + 0.5 - cy) / (n * 0.75)) ** 1.5
+                icon.set_at((x, y), tuple(int(c + (e - c) * fade) for c, e in zip(ray, ICON_EDGE)))
+
+    gremlin = grid_to_surface(gremlin_frame("stand"), GREMLIN_PAL)
+    icon.blit(gremlin, ((n - gremlin.get_width()) // 2, (n - gremlin.get_height()) // 2 + 1))
+    return icon
 
 
 def scale(surf, factor):

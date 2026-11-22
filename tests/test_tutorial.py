@@ -1,0 +1,121 @@
+# Patch Panic - defend your workstations from bloatware gremlins.
+# Copyright (C) 2026 Kamran Zafar
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+"""Tests for the scripted world and the tutorial's step-by-step flow."""
+from types import SimpleNamespace
+
+import pytest
+
+from patch_panic.config import BLOAT, LevelConfig
+from patch_panic.effects import Effects
+from patch_panic.entities import GremlinState
+from patch_panic.events import Event, EventBus
+from patch_panic.settings import Settings
+from patch_panic.storage import SaveStore
+from patch_panic.tutorial import STEP_PAUSE, PatchStep, RescueStep, SurgeStep, SwatStep, TutorialScene
+from patch_panic.world import Outcome, World
+
+
+class FakeApp:
+    """Just enough of `App` for scenes to run without a window."""
+
+    def __init__(self, tmp_path):
+        self.bus = EventBus()
+        self.effects = Effects()
+        self.settings = Settings()
+        self.save = SaveStore(tmp_path / "save.json")
+        self.sounds = SimpleNamespace(muted=False)
+        self.scene = None
+        self.titles = 0
+
+    def change_scene(self, scene):
+        if self.scene is not None:
+            self.scene.on_exit()
+        self.scene = scene
+
+    def show_title(self):
+        self.titles += 1
+
+
+@pytest.fixture
+def app(tmp_path):
+    return FakeApp(tmp_path)
+
+
+@pytest.fixture
+def tutorial(app):
+    scene = TutorialScene(app)
+    app.change_scene(scene)
+    return scene
+
+
+def tick(scene, seconds, dt=1 / 60):
+    for _ in range(int(seconds / dt)):
+        scene.update(dt)
+
+
+def finish_step(scene):
+    tick(scene, STEP_PAUSE + 0.1)
+
+
+def test_scripted_world_spawns_nothing_and_never_ends():
+    world = World(1, config=LevelConfig.tutorial(), scripted=True)
+    for _ in range(600):
+        world.update(1 / 30)
+    assert not world.gremlins and not world.surges and world.powerup is None
+    assert world.outcome is Outcome.IN_PROGRESS
+
+
+def test_tutorial_walks_through_every_step(tutorial):
+    world = tutorial.world
+    assert isinstance(tutorial.step, SwatStep)
+    gremlin = world.gremlins[0]
+    world.click((gremlin.x, gremlin.y - 12))
+    assert tutorial.hint() == "Nice!"
+    finish_step(tutorial)
+
+    assert isinstance(tutorial.step, RescueStep)
+    thief = tutorial.world.gremlins[0]
+    world.click((thief.x, thief.y - 12))
+    disk = world.disks[0]
+    target = world.computers[1]
+    world.click((disk.x, disk.y))
+    world.release((target.x, target.y))
+    finish_step(tutorial)
+
+    assert isinstance(tutorial.step, SurgeStep)
+    tick(tutorial, 1.0)
+    world.click(world.surges[0].pos)
+    finish_step(tutorial)
+
+    assert isinstance(tutorial.step, PatchStep)
+    world.click((world.powerup.x, world.powerup.y))
+    finish_step(tutorial)
+    assert tutorial.finished
+
+
+def test_missed_step_is_retried(tutorial):
+    world = tutorial.world
+    tick(tutorial, 30)  # let the gremlin finish its install
+    assert isinstance(tutorial.step, SwatStep)
+    assert not any(c.os == BLOAT for c in world.computers)  # board was reset...
+    assert any(g.state is not GremlinState.WALK_OUT for g in world.gremlins)  # ...and a new gremlin sent
+
+
+def test_leaving_the_tutorial_unsubscribes_it(app, tutorial):
+    app.change_scene(None)
+    app.bus.emit(Event.GREMLIN_SQUASHED, x=0, y=0, carrier=False, kind=None)
+    assert not tutorial.step_done
