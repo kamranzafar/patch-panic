@@ -28,7 +28,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from .config import BLOAT, GameMode, LevelConfig
-from .entities import Computer, nearest_exit
+from .entities import Computer, Point, nearest_exit
 from .events import Event
 from .run import Run
 from .scenes import PlayScene, is_left_click
@@ -51,6 +51,14 @@ class TutorialStep(ABC):
     def failed(self, world: World) -> bool:
         """Has the player missed the chance, so the step should be retried?"""
         return False
+
+    def handoff(self, world: World) -> bool:
+        """Should the next step start right now, on the board as it is (no reset)?"""
+        return False
+
+    def focus(self, world: World) -> list[Point]:
+        """Places the player should look at; the scene points at them."""
+        return []
 
 
 class SwatStep(TutorialStep):
@@ -79,6 +87,9 @@ class RescueStep(TutorialStep):
     def failed(self, world):
         return not (world.gremlins or world.disks or world.dragging)  # it got away with the disk
 
+    def focus(self, world):
+        return [(d.x, d.y) for d in world.disks]
+
 
 class SurgeStep(TutorialStep):
     hint = "A cable is flashing: click the spark before it reaches a computer!"
@@ -88,7 +99,8 @@ class SurgeStep(TutorialStep):
         src, dst = world.cables[0]
         world.warn_surge(src, dst, 0.1)
 
-    def failed(self, world):
+    def handoff(self, world):
+        # Missed the spark: the machine is fried and its disk is out, which is exactly the next lesson.
         return any(c.is_rebooting for c in world.computers)
 
 
@@ -102,14 +114,21 @@ class FryStep(TutorialStep):
 
     @property
     def hint(self) -> str:
-        if self.computer is not None and self.computer.is_rebooting:
+        if self.computer is None or self.computer.is_clean:
+            return "Watch out: a surge is about to hit a computer!"
+        if self.computer.is_rebooting:
             return "A surge fried this computer and ejected its OS disk. Wait for the reboot..."
         return "Rebooted! Drag the disk back before it blinks out."
 
     def start(self, world):
-        src, dst = world.cables[0]
-        self.computer = dst
-        world.spawn_surge(src, dst, 0.999)  # lands on the next tick
+        self.computer = next((c for c in world.computers if c.is_rebooting), None)  # handed over from a miss
+        if self.computer is None:
+            src, dst = world.cables[0]
+            self.computer = dst
+            world.spawn_surge(src, dst, 0.999)  # lands on the next tick
+
+    def focus(self, world):
+        return [(d.x, d.y) for d in world.disks]
 
     def failed(self, world):
         stranded = self.computer.is_broken and not self.computer.is_rebooting
@@ -186,14 +205,17 @@ class TutorialScene(PlayScene):
             self.pause -= dt
             if self.pause <= 0:
                 self._next_step()
+        elif self.step.handoff(self.world):
+            self._next_step(reset=False)
         elif self.step.failed(self.world):
             self.world.reset_board()
             self.step.start(self.world)
 
-    def _next_step(self) -> None:
+    def _next_step(self, reset: bool = True) -> None:
         self.index += 1
         self.step_done = False
-        self.world.reset_board()
+        if reset:
+            self.world.reset_board()
         if self.step is not None:
             self.step.start(self.world)
 
@@ -203,5 +225,8 @@ class TutorialScene(PlayScene):
             return
         if self.finished:
             renderer.draw_hint(self.hint())
-        else:
-            renderer.draw_hint(f"{self.index + 1}/{len(self.steps)}  {self.hint()}")
+            return
+        if not self.step_done:
+            for pos in self.step.focus(self.world):
+                renderer.draw_attention(pos, t)
+        renderer.draw_hint(f"{self.index + 1}/{len(self.steps)}  {self.hint()}")

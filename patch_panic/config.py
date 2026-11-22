@@ -65,6 +65,7 @@ GRID_COLS, GRID_ROWS = 6, 3        # computers are placed in jittered grid cells
 CABLES_PER_COMPUTER = 2            # each computer links to its N nearest neighbours
 AUTO_PATCH_MAX = 2                 # computers restored by the Auto-Patch power-up
 DISK_SNAP_RADIUS = 60              # a dropped disk snaps to a matching computer this close
+ATTENTION_RADIUS = 26              # tutorial: pulsing ring around something to look at
 CARRIER_SPEED_FACTOR = 1.25        # a gremlin carrying a stolen OS runs for it
 LATE_CATCH_FRACTION = 1 / 3        # catching a carrier in the last third of its escape is a close call
 PERFECT_SAFETY = 1                 # a perfect level lets the next one end with this many fewer clean machines

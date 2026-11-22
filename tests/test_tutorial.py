@@ -141,3 +141,48 @@ def test_fry_step_is_retried_if_the_disk_expires(tutorial):
     tutorial.world.disks[0].age = 10_000  # let the ejected disk expire
     tick(tutorial, FRY_TIME + 0.1)
     assert tutorial.step.computer is first and first.is_rebooting  # fried again: the step restarted
+
+
+def skip_to(scene, step_type):
+    while not isinstance(scene.step, step_type):
+        scene._next_step()
+
+
+def test_missing_the_spark_hands_over_to_the_fry_lesson(tutorial):
+    skip_to(tutorial, SurgeStep)
+    world = tutorial.world
+    for _ in range(60 * 30):  # don't zap: wait for the surge to reach its computer
+        if isinstance(tutorial.step, FryStep):
+            break
+        tutorial.update(1 / 60)
+    assert isinstance(tutorial.step, FryStep)
+    fried = tutorial.step.computer
+    assert fried.is_rebooting and fried.os is None
+    assert [d.kind for d in world.disks] == [fried.native]  # the ejected disk is still there (no reset)
+    tick(tutorial, FRY_TIME)
+    disk = world.disks[0]
+    world.click((disk.x, disk.y))
+    world.release((fried.x, fried.y))
+    finish_step(tutorial)
+    assert isinstance(tutorial.step, PatchStep)
+
+
+def test_fry_step_hints_follow_what_happens(tutorial):
+    skip_to(tutorial, FryStep)
+    hints = [tutorial.hint()]
+    tick(tutorial, 0.05)
+    hints.append(tutorial.hint())
+    tick(tutorial, FRY_TIME)
+    hints.append(tutorial.hint())
+    assert "about to hit" in hints[0]
+    assert "Wait for the reboot" in hints[1]
+    assert "Drag the disk back" in hints[2]
+
+
+def test_tutorial_points_at_the_ejected_disk(tutorial):
+    world = tutorial.world
+    assert tutorial.step.focus(world) == []  # swat step: nothing to point at
+    skip_to(tutorial, FryStep)
+    tick(tutorial, 0.05)
+    disk = world.disks[0]
+    assert tutorial.step.focus(world) == [(disk.x, disk.y)]

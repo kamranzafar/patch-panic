@@ -23,8 +23,8 @@ import random
 import pygame
 
 from . import sprites
-from .config import (BLOAT, DISK_BLINK_TIME, DYING_TIME, HEIGHT, HUD_HEIGHT, INSTALL_WARN_TIME, OS_COLORS,
-                     WIDTH, Color, Gremlins)
+from .config import (ATTENTION_RADIUS, BLOAT, DISK_BLINK_TIME, DYING_TIME, HEIGHT, HUD_HEIGHT, INSTALL_WARN_TIME,
+                     OS_COLORS, WIDTH, Color, Gremlins)
 from .effects import Effects
 from .entities import Computer, Disk, Gremlin, GremlinState, Point, PowerUp, Surge
 from .world import World
@@ -310,6 +310,17 @@ class Renderer:
         border = Color.YELLOW if hot or selected else Color.PANEL_BORDER
         pygame.draw.rect(self.surface, border, rect, 2, border_radius=10)
         self.text(label, self.fonts.normal, Color.WHITE, rect.center)
+
+    def draw_attention(self, pos: Point, t: float) -> None:
+        """A pulsing ring and a bouncing arrow that point the player at `pos` (used by the tutorial)."""
+        x, y = round(pos[0]), round(pos[1])
+        pulse = math.sin(t * 8)
+        pygame.draw.circle(self.surface, Color.YELLOW, (x, y), ATTENTION_RADIUS + round(4 * pulse), 3)
+        tip = y - ATTENTION_RADIUS - 8 - round(5 * abs(pulse))
+        arrow = [(x, tip), (x - 11, tip - 14), (x - 4, tip - 14), (x - 4, tip - 26), (x + 4, tip - 26),
+                 (x + 4, tip - 14), (x + 11, tip - 14)]
+        pygame.draw.polygon(self.surface, Color.YELLOW, arrow)
+        pygame.draw.polygon(self.surface, Color.BLACK, arrow, 2)
 
     def draw_hint(self, text: str) -> None:
         """A persistent instruction box along the bottom of the play area."""
