@@ -2,6 +2,18 @@
   <img src=".github/header.svg" alt="Patch Panic: defend your workstations from bloatware gremlins" width="760">
 </p>
 
+<p align="center">
+  <a href="https://github.com/kamranzafar/patch-panic/actions/workflows/ci.yml"><img src="https://github.com/kamranzafar/patch-panic/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/kamranzafar/patch-panic/actions/workflows/build.yml"><img src="https://github.com/kamranzafar/patch-panic/actions/workflows/build.yml/badge.svg" alt="Build executables"></a>
+  <a href="https://github.com/kamranzafar/patch-panic/releases/latest"><img src="https://img.shields.io/github/v/release/kamranzafar/patch-panic?color=ff8c42" alt="Latest release"></a>
+  <a href="https://github.com/kamranzafar/patch-panic/releases"><img src="https://img.shields.io/github/downloads/kamranzafar/patch-panic/total?color=ff5c9a" alt="Downloads"></a>
+  <br>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/kamranzafar/patch-panic?color=blue" alt="License: GPL-3.0"></a>
+  <img src="https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fkamranzafar%2Fpatch-panic%2Fmain%2Fpyproject.toml&color=3776ab" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platforms: Windows, macOS, Linux">
+  <a href="https://pyga.me"><img src="https://img.shields.io/badge/made%20with-pygame--ce-9bd23c" alt="Made with pygame-ce"></a>
+</p>
+
 A small arcade game in Python: bloatware gremlins sneak up to your workstations
 and try to install BloatOS. Swat them before the install finishes. If one runs
 off with a computer's OS, swat it so it drops the disk, then drag the disk back
