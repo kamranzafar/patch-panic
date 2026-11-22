@@ -7,7 +7,7 @@ name = "patch-panic"
 dynamic = ["version"]
 description = "Arcade game: defend your workstations from bloatware gremlins."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 authors = [{ name = "Kamran Zafar" }]
