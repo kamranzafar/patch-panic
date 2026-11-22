@@ -19,6 +19,7 @@ dependencies = ["pygame-ce>=2.5"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pyflakes>=3"]
+build = ["pyinstaller>=6.22", "pillow>=10"]
 
 [project.scripts]
 patch-panic = "patch_panic.app:main"

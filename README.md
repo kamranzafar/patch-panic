@@ -78,6 +78,8 @@ patch_panic/
 tests/         Unit tests for the game rules (no window needed)
 tools/         make_readme_header.py: regenerates the README header (.github/header.svg)
                make_social_preview.py: regenerates the GitHub social preview image
+               build_executable.sh: builds, launch-tests and packages a standalone app
+               make_icon.py, smoke_test.py: app icon and launch test used by the build
 ```
 
 How it fits together: `World` decides what happens and announces it on the
@@ -108,15 +110,48 @@ filtering, so they stay crisp).
   pixel size). The game prefers a PNG when one exists and falls back to the
   built-in grid when it doesn't.
 
-## Build a standalone executable (optional)
+## Download
 
-Build on each target OS (PyInstaller does not cross-compile):
+Ready-to-run builds are attached to each
+[GitHub release](https://github.com/kamranzafar/patch-panic/releases), so you
+don't need Python installed:
+
+| System | Download |
+|---|---|
+| Windows 10/11 (64-bit) | `PatchPanic-<version>-windows-x64.zip` |
+| macOS, Apple Silicon (M1 and later) | `PatchPanic-<version>-macos-arm64.zip` |
+| macOS, Intel | `PatchPanic-<version>-macos-intel.zip` |
+| Linux x86-64 (Ubuntu 20.04+, Debian 11+, Fedora 32+ or similar) | `PatchPanic-<version>-linux-x64.tar.gz` |
+
+- **macOS:** the app isn't signed by Apple, so the first time, right-click
+  `PatchPanic.app` and choose **Open**. If macOS says the app is damaged, run
+  `xattr -dr com.apple.quarantine PatchPanic.app` and try again.
+- **Windows:** SmartScreen may warn about an unrecognised app. Click
+  **More info → Run anyway**.
+- **Linux:** extract the archive (`tar xzf PatchPanic-*.tar.gz`) and run
+  `./PatchPanic`.
+
+## Building executables
+
+The builds come from GitHub Actions (`.github/workflows/build.yml`):
+
+- **Push a version tag** to build and publish a release:
+  update `__version__` in `patch_panic/__init__.py`, commit, then
+  `git tag v1.2.0 && git push origin v1.2.0`. The workflow checks that the tag
+  matches the version, runs the tests, builds for Windows, macOS (Apple Silicon
+  and Intel) and Linux, launch-tests each build, and attaches them to the release.
+  Linux is built inside Debian 11 so it also runs on older distributions.
+- **Run it by hand** from the Actions tab ("Build executables" → "Run
+  workflow"). Enter an existing tag to attach builds to that release, or leave
+  it empty to just build. The files are then under the run's **Artifacts**.
+
+To build locally, use the same script as CI (PyInstaller only builds for the
+system it runs on):
 
 ```bash
-pip install pyinstaller
-pyinstaller --onefile --windowed --name PatchPanic run_game.py
-# output in dist/ -- uses the built-in sprites. To bundle edited PNGs instead,
-# add: --add-data "patch_panic/assets:patch_panic/assets"  (";" instead of ":" on Windows)
+pip install -e ".[build]"
+tools/build_executable.sh macos-intel   # or macos-arm64, windows-x64, linux-x64
+# result: out/PatchPanic-<version>-<target>.zip (.tar.gz on Linux)
 ```
 
 ## License

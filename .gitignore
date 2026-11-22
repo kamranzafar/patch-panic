@@ -13,6 +13,8 @@ dist/
 
 # PyInstaller (the generated .spec file is recreated on each build)
 *.spec
+out/
+stage/
 
 # --- Tools ----------------------------------------------------------------
 .pytest_cache/
