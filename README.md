@@ -52,8 +52,8 @@ Each kind of gremlin has its own colour, and new kinds join in as the levels go 
   (Relaxed, Normal or Frantic).
 - **Daily** – everyone gets the same layouts for the day, always on Normal, so
   scores compare.
-- **Tutorial** – a short guided level: swat, rescue a disk, zap a surge, grab
-  the patch.
+- **Tutorial** – a short guided level: swat, rescue a disk, zap a surge, recover
+  from a surge that gets through (reboot and ejected OS), grab the patch.
 
 Settings also has a colourblind mode (a shape on every OS disk and stripe),
 screen shake, pausing when the window loses focus, and rebindable keys.

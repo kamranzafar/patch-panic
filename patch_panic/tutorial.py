@@ -28,7 +28,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from .config import BLOAT, GameMode, LevelConfig
-from .entities import nearest_exit
+from .entities import Computer, nearest_exit
 from .events import Event
 from .run import Run
 from .scenes import PlayScene, is_left_click
@@ -92,6 +92,30 @@ class SurgeStep(TutorialStep):
         return any(c.is_rebooting for c in world.computers)
 
 
+class FryStep(TutorialStep):
+    """A surge gets through: the machine reboots and ejects its OS disk, which has to go back."""
+
+    done_on = Event.OS_RESTORED
+
+    def __init__(self) -> None:
+        self.computer: Computer | None = None
+
+    @property
+    def hint(self) -> str:
+        if self.computer is not None and self.computer.is_rebooting:
+            return "A surge fried this computer and ejected its OS disk. Wait for the reboot..."
+        return "Rebooted! Drag the disk back before it blinks out."
+
+    def start(self, world):
+        src, dst = world.cables[0]
+        self.computer = dst
+        world.spawn_surge(src, dst, 0.999)  # lands on the next tick
+
+    def failed(self, world):
+        stranded = self.computer.is_broken and not self.computer.is_rebooting
+        return stranded and not (world.surges or world.disks or world.dragging)  # the disk expired
+
+
 class PatchStep(TutorialStep):
     hint = "Grab the golden patch for bonus points and a power-up!"
     done_on = Event.POWERUP_COLLECTED
@@ -104,7 +128,7 @@ class PatchStep(TutorialStep):
 
 
 def tutorial_steps() -> list[TutorialStep]:
-    return [SwatStep(), RescueStep(), SurgeStep(), PatchStep()]
+    return [SwatStep(), RescueStep(), SurgeStep(), FryStep(), PatchStep()]
 
 
 class TutorialScene(PlayScene):

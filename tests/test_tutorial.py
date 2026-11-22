@@ -19,13 +19,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from patch_panic.config import BLOAT, LevelConfig
+from patch_panic.config import BLOAT, FRY_TIME, LevelConfig
 from patch_panic.effects import Effects
 from patch_panic.entities import GremlinState
 from patch_panic.events import Event, EventBus
 from patch_panic.settings import Settings
 from patch_panic.storage import SaveStore
-from patch_panic.tutorial import STEP_PAUSE, PatchStep, RescueStep, SurgeStep, SwatStep, TutorialScene
+from patch_panic.tutorial import STEP_PAUSE, FryStep, PatchStep, RescueStep, SurgeStep, SwatStep, TutorialScene
 from patch_panic.world import Outcome, World
 
 
@@ -101,6 +101,18 @@ def test_tutorial_walks_through_every_step(tutorial):
     world.click(world.surges[0].pos)
     finish_step(tutorial)
 
+    assert isinstance(tutorial.step, FryStep)
+    tick(tutorial, 0.1)
+    fried = tutorial.step.computer
+    assert fried.is_rebooting and fried.os is None and len(world.disks) == 1
+    assert "reboot" in tutorial.hint()
+    tick(tutorial, FRY_TIME)
+    assert "Drag the disk back" in tutorial.hint()
+    disk = world.disks[0]
+    world.click((disk.x, disk.y))
+    world.release((fried.x, fried.y))
+    finish_step(tutorial)
+
     assert isinstance(tutorial.step, PatchStep)
     world.click((world.powerup.x, world.powerup.y))
     finish_step(tutorial)
@@ -119,3 +131,13 @@ def test_leaving_the_tutorial_unsubscribes_it(app, tutorial):
     app.change_scene(None)
     app.bus.emit(Event.GREMLIN_SQUASHED, x=0, y=0, carrier=False, kind=None)
     assert not tutorial.step_done
+
+
+def test_fry_step_is_retried_if_the_disk_expires(tutorial):
+    while not isinstance(tutorial.step, FryStep):
+        tutorial._next_step()
+    first = tutorial.step.computer
+    tick(tutorial, 0.1)
+    tutorial.world.disks[0].age = 10_000  # let the ejected disk expire
+    tick(tutorial, FRY_TIME + 0.1)
+    assert tutorial.step.computer is first and first.is_rebooting  # fried again: the step restarted

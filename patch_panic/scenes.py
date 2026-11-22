@@ -143,12 +143,9 @@ def button_row(count: int, width: int, gap: int, y: int, height: int) -> list[tu
 
 class TitleScene(MenuScene):
     HELP = (
-        "Click gremlins to swat them before their install finishes.",
-        "Swat a fleeing gremlin to make it drop the OS disk it stole,",
-        "then drag the disk onto a computer with the matching colour stripe.",
-        "Click power surges on the cables before they fry a machine and eject its OS.",
-        "Grab the golden patch that flies past mid-level for a power-up.",
-        "Keep at least half your computers clean to survive each level.",
+        "Swat gremlins before they install BloatOS, and drag stolen disks back home.",
+        "Zap power surges on the cables and grab the golden patch for a power-up.",
+        "Keep half your computers clean to survive. New? Try the Tutorial!",
     )
     DEMO_Y = 404
     DEMO_INSTALL_TIME = 2.5
@@ -201,7 +198,7 @@ class TitleScene(MenuScene):
         renderer.text(TITLE, f.big, Color.YELLOW, (WIDTH // 2, 120 + math.sin(t * 2) * 4))
         renderer.text("Defend your workstations from bloatware gremlins!", f.normal, Color.WHITE, (WIDTH // 2, 185))
         for i, line in enumerate(self.HELP):
-            renderer.text(line, f.small, Color.GREY, (WIDTH // 2, 232 + i * 23))
+            renderer.text(line, f.small, Color.GREY, (WIDTH // 2, 240 + i * 26))
         renderer.draw_computer(self.demo_computer, t)
         if self.demo_gremlin:
             renderer.draw_gremlin(self.demo_gremlin, t)
