@@ -77,6 +77,7 @@ patch_panic/
   assets/sprites/*.png
 tests/         Unit tests for the game rules (no window needed)
 tools/         make_readme_header.py: regenerates the README header (.github/header.svg)
+               make_social_preview.py: regenerates the GitHub social preview image
 ```
 
 How it fits together: `World` decides what happens and announces it on the
