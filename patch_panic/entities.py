@@ -121,6 +121,8 @@ class Gremlin:
         self.target: Computer | None = None
         self.cable: tuple[Computer, Computer] | None = None  # a saboteur's target
         self.loot: Disk | None = None  # the floor disk a scavenger is going for
+        self.chews_left = kind.chews   # cables a saboteur still has to chew
+        self.warned = False
         self.carry: int | None = None  # stolen OS kind
         self.timer = 0.0
         self.facing = 1
@@ -146,6 +148,7 @@ class Gremlin:
     def start_sabotage(self) -> None:
         self.state = GremlinState.SABOTAGE
         self.timer = 0.0
+        self.warned = False  # has the "about to spark" warning gone out for this chew?
 
     def finish_sabotage(self) -> None:
         """Done chewing; walk on (a scavenger then looks for a disk to grab)."""

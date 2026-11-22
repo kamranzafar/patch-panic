@@ -129,6 +129,7 @@ class GremlinKind:
     hits: int = 1                    # swats needed
     splits: int = 0                  # sprinters it splits into when swatted
     sabotages: bool = False          # goes for a cable instead of a computer
+    chews: int = 1                   # cables a saboteur chews before it moves on
     scavenges: bool = False          # steals OS disks lying on the floor
 
 
@@ -141,7 +142,7 @@ class Gremlins:
     SPLITTER = GremlinKind("splitter", "Splitter", "Splits in two when swatted", first_level=11, weight=0.25,
                            splits=2)
     SABOTEUR = GremlinKind("saboteur", "Saboteur", "Chews cables to start surges", first_level=13,
-                           weight=0.2, sabotages=True)
+                           weight=0.2, sabotages=True, chews=1)
     SCAVENGER = GremlinKind("scavenger", "Scavenger", "Steals OS disks left on the floor", first_level=17,
                             weight=0.2, sabotages=True, scavenges=True)
     ALL = (STANDARD, SPRINTER, ARMORED, SPLITTER, SABOTEUR, SCAVENGER)

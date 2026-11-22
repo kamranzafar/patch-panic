@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Unit tests for the game rules. No window or audio needed."""
+import dataclasses
 import random
 
 import pytest
@@ -429,6 +430,38 @@ def test_saboteur_chews_a_cable_into_a_surge(world, bus):
     assert Event.CABLE_SABOTAGED in rec.names()
 
 
+def test_chewed_cable_flashes_and_warns_before_it_sparks(world, bus):
+    rec = Recorder(bus)
+    saboteur = sabotaging(world)
+    assert world.cables_about_to_spark == []
+    world.update(SABOTAGE_TIME - SURGE_WARNING_TIME / 2)
+    assert world.cables_about_to_spark == [saboteur.cable]
+    assert rec.names().count(Event.SURGE_WARNING) == 1 and not world.surges
+    world.update(SURGE_WARNING_TIME)
+    assert world.surges and rec.names().count(Event.SURGE_WARNING) == 1  # warned once per chew
+
+
+def test_no_flash_while_the_cables_are_shielded(world):
+    sabotaging(world)
+    world.shield_cables(30)
+    world.update(SABOTAGE_TIME - SURGE_WARNING_TIME / 2)
+    assert world.cables_about_to_spark == []
+
+
+def test_a_saboteur_with_more_chews_moves_on_to_another_cable(world, bus):
+    rec = Recorder(bus)
+    tough = dataclasses.replace(Gremlins.SABOTEUR, chews=2)
+    saboteur = world.spawn_saboteur(world.cables[0], kind=tough)
+    saboteur.x, saboteur.y = saboteur.cable_spot()
+    world.to_spawn = 0
+    first = saboteur.cable
+    run_until(world, lambda: world.surges, max_seconds=SABOTAGE_TIME + 0.5)
+    assert saboteur.state is GremlinState.WALK_IN and saboteur.cable not in (None, first)
+    world.shield_cables(0)  # clear the first surge so it can't interfere
+    run_until(world, lambda: rec.names().count(Event.CABLE_SABOTAGED) == 2, max_seconds=20)
+    assert saboteur.state is GremlinState.WALK_OUT
+
+
 def test_swatting_a_saboteur_stops_the_surge(world):
     saboteur = sabotaging(world)
     world.click((saboteur.x, saboteur.y - 12))
@@ -475,10 +508,22 @@ def test_scavenger_retargets_when_the_player_grabs_its_disk_first(world):
 
 def test_two_scavengers_go_for_different_disks(world):
     a, b = world.computers[0], world.computers[1]
+    a.os = b.os = None
     world.disks += [Disk(a.native, 300, 300), Disk(b.native, 600, 400)]
     first, second = scavenger_near(world, 450, 350), scavenger_near(world, 460, 350)
     world.update(0.01)
     assert first.loot is not None and second.loot is not None and first.loot is not second.loot
+
+
+def test_scavenger_ignores_a_disk_until_its_machine_has_rebooted(world):
+    computer = world.computers[0]
+    world._fry(computer)  # rebooting, and its disk is on the floor
+    disk = world.disks[0]
+    scavenger = scavenger_near(world, disk.x + 40, disk.y)
+    scavenger.finish_sabotage()  # it has already chewed and is waiting for loot
+    run_until(world, lambda: not computer.is_rebooting, max_seconds=FRY_TIME + 0.1)
+    assert disk in world.disks  # left alone for the whole reboot
+    run_until(world, lambda: scavenger.carry is not None, max_seconds=2)  # usable now, so fair game
 
 
 def test_scavenger_chews_a_cable_then_waits_for_loot(world, bus):

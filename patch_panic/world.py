@@ -391,13 +391,21 @@ class World:
         if g.timer >= SCAVENGE_WAIT:
             g.leave(nearest_exit(g.x, g.y))
 
+    def _usable(self, disk: Disk) -> bool:
+        """Could the player put this disk back right now? (Not while its machine is still rebooting.)"""
+        return any(c.accepts(disk.kind) for c in self.computers)
+
     def _claim_loot(self, g: Gremlin) -> Disk | None:
-        """The floor disk this scavenger is after: keep its current one, or claim the nearest free one."""
-        if g.loot is not None and g.loot in self.disks:
+        """The floor disk this scavenger is after: keep its current one, or claim the nearest free one.
+
+        Only disks the player could already put back count, so a scavenger never snatches a disk
+        during the reboot, when the player has no way to use it yet.
+        """
+        if g.loot is not None and g.loot in self.disks and self._usable(g.loot):
             return g.loot
         g.loot = None
-        free = [d for d in self.disks
-                if d.claimed_by is None or not d.claimed_by.is_alive or d.claimed_by.loot is not d]
+        free = [d for d in self.disks if self._usable(d)
+                and (d.claimed_by is None or not d.claimed_by.is_alive or d.claimed_by.loot is not d)]
         if not free:
             return None
         g.loot = min(free, key=lambda d: distance((g.x, g.y), (d.x, d.y)))
@@ -425,14 +433,31 @@ class World:
             g.leave(nearest_exit(g.x, g.y))
             self.bus.emit(Event.COMPUTER_INFECTED, computer=computer)
 
+    @property
+    def cables_about_to_spark(self) -> list[tuple[Computer, Computer]]:
+        """Cables being chewed that will spark within SURGE_WARNING_TIME (drawn flashing, like a warning)."""
+        if self.is_shielded:
+            return []
+        return [g.cable for g in self.alive_gremlins
+                if g.state is GremlinState.SABOTAGE and g.timer >= SABOTAGE_TIME - SURGE_WARNING_TIME]
+
     def _sabotage(self, g: Gremlin, dt: float) -> None:
         g.timer += dt
+        if not g.warned and not self.is_shielded and g.timer >= SABOTAGE_TIME - SURGE_WARNING_TIME:
+            g.warned = True
+            src, dst = g.cable
+            self.bus.emit(Event.SURGE_WARNING, src=src, dst=dst)
         if g.timer < SABOTAGE_TIME:
             return
         x, y = g.cable_spot()
         cable = g.cable
+        g.chews_left -= 1
+        next_cable = self._next_cable(g) if g.chews_left > 0 else None
         if g.kind.scavenges:
             g.finish_sabotage()  # sticks around to grab whatever the surge knocks loose
+        elif next_cable is not None:
+            g.finish_sabotage()
+            g.assign_cable(next_cable)  # on to the next cable
         else:
             g.leave(nearest_exit(g.x, g.y))
         if self.is_shielded or len(self.surges) >= self.config.max_surges + 2:
@@ -440,6 +465,19 @@ class World:
         src, dst = cable if self.rng.random() < 0.5 else cable[::-1]
         self.spawn_surge(src, dst, 0.5)
         self.bus.emit(Event.CABLE_SABOTAGED, x=x, y=y)
+
+    def _next_cable(self, g: Gremlin) -> tuple[Computer, Computer] | None:
+        """The nearest other cable for a saboteur to chew next."""
+        others = [c for c in self.cables if c != g.cable]
+        if not others:
+            return None
+        here = g.cable_spot()
+
+        def middle(cable):
+            (ax, ay), (bx, by) = (c.cable_anchor() for c in cable)
+            return (ax + bx) / 2, (ay + by) / 2
+
+        return min(others, key=lambda c: distance(here, middle(c)))
 
     def _update_surges(self, dt: float) -> None:
         self.surge_timer -= dt

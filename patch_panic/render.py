@@ -121,9 +121,11 @@ class Renderer:
                 pygame.draw.line(self.surface, Color.ICE, a.cable_anchor(), b.cable_anchor(), 3)
         for surge in world.surges:
             pygame.draw.line(self.surface, Color.SURGE_PATH, surge.pos, surge.dst.cable_anchor(), 4)
+        warn_color = Color.SURGE if int(t * 16) % 2 else Color.SURGE_PATH
         for warning in world.surge_warnings:
-            color = Color.SURGE if int(t * 16) % 2 else Color.SURGE_PATH
-            pygame.draw.line(self.surface, color, warning.src.cable_anchor(), warning.dst.cable_anchor(), 4)
+            pygame.draw.line(self.surface, warn_color, warning.src.cable_anchor(), warning.dst.cable_anchor(), 4)
+        for a, b in world.cables_about_to_spark:
+            pygame.draw.line(self.surface, warn_color, a.cable_anchor(), b.cable_anchor(), 4)
 
         if world.honeypot:
             self.draw_honeypot(world.honeypot, t)
