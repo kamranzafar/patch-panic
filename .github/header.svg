@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="754" height="375" viewBox="0 0 754 375" role="img" aria-label="Patch Panic">
+<defs><linearGradient id="title" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffd23f"/><stop offset="0.55" stop-color="#ff8c42"/><stop offset="1" stop-color="#ff5c9a"/></linearGradient><style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:15px;white-space:pre}.spark{animation:flicker 0.9s steps(2) infinite}@keyframes flicker{0%{opacity:1}50%{opacity:.35}100%{opacity:1}}</style></defs>
+<rect width="754" height="375" rx="14" fill="#141821"/>
+<rect x="1" y="1" width="752" height="373" rx="13" fill="none" stroke="#2c3344"/>
+<text x="74.5" y="41.2" xml:space="preserve" fill="url(#title)" font-weight="bold"> _____     _______ _____ _    _   _____        _   _ _____ _____</text>
+<text x="74.5" y="60.2" xml:space="preserve" fill="url(#title)" font-weight="bold">|  __ \ /\|__   __/ ____| |  | | |  __ \ /\   | \ | |_   _/ ____|</text>
+<text x="74.5" y="79.2" xml:space="preserve" fill="url(#title)" font-weight="bold">| |__) /  \  | | | |    | |__| | | |__) /  \  |  \| | | || |</text>
+<text x="74.5" y="98.2" xml:space="preserve" fill="url(#title)" font-weight="bold">|  ___/ /\ \ | | | |    |  __  | |  ___/ /\ \ | . ` | | || |</text>
+<text x="74.5" y="117.2" xml:space="preserve" fill="url(#title)" font-weight="bold">| |  / ____ \| | | |____| |  | | | |  / ____ \| |\  |_| || |____</text>
+<text x="74.5" y="136.2" xml:space="preserve" fill="url(#title)" font-weight="bold">|_| /_/    \_\_|  \_____|_|  |_| |_| /_/    \_\_| \_|_____\_____|</text>
+<text x="28.0" y="174.2" xml:space="preserve"><tspan fill="#aab2c5">      .-----------------. </tspan><tspan fill="#ffd23f">             </tspan><tspan fill="#ff5c9a">   /\          /\ </tspan></text>
+<text x="28.0" y="193.2" xml:space="preserve"><tspan fill="#aab2c5">      |  .-----------.  | </tspan><tspan fill="#ffd23f">             </tspan><tspan fill="#ff5c9a">  /  \________/  \</tspan><tspan fill="#f4f4f8"> </tspan></text>
+<text x="28.0" y="212.2" xml:space="preserve"><tspan fill="#aab2c5">      |  |  </tspan><tspan fill="#9bd23c">BloatOS</tspan><tspan fill="#aab2c5">  |  | </tspan><tspan fill="#ffd23f">             </tspan><tspan fill="#ff5c9a"> |    </tspan><tspan fill="#f4f4f8">O</tspan><tspan fill="#ff5c9a">      </tspan><tspan fill="#f4f4f8">O</tspan><tspan fill="#ff5c9a">    </tspan><tspan fill="#f4f4f8">|</tspan></text>
+<text x="28.0" y="231.2" xml:space="preserve"><tspan fill="#aab2c5">      |  |   </tspan><tspan fill="#9bd23c">(x_x)</tspan><tspan fill="#aab2c5">   |  | </tspan><tspan fill="#ffd23f" class="spark">  ~*zzzt*~   </tspan><tspan fill="#ff5c9a"> |    \______/    </tspan><tspan fill="#f4f4f8">|  "just one quick</tspan></text>
+<text x="28.0" y="250.2" xml:space="preserve"><tspan fill="#aab2c5">      |  | [</tspan><tspan fill="#ff6b6b">#####</tspan><tspan fill="#aab2c5">  ] |  | </tspan><tspan fill="#ffd23f" class="spark"> ===/\/\===  </tspan><tspan fill="#ff5c9a"> |                </tspan><tspan fill="#f4f4f8">|   update..."</tspan></text>
+<text x="28.0" y="269.2" xml:space="preserve"><tspan fill="#aab2c5">      |  '-----------'  | </tspan><tspan fill="#ffd23f">             </tspan><tspan fill="#ff5c9a">  \______________/</tspan></text>
+<text x="28.0" y="288.2" xml:space="preserve"><tspan fill="#aab2c5">      '-------..--------' </tspan><tspan fill="#ffd23f">             </tspan><tspan fill="#ff5c9a">    /|        |\ </tspan></text>
+<text x="28.0" y="307.2" xml:space="preserve"><tspan fill="#aab2c5">         [===========]    </tspan><tspan fill="#ffd23f">             </tspan><tspan fill="#ff5c9a">   /_|        |_\ </tspan></text>
+<text x="153.6" y="345.2" xml:space="preserve" fill="#8b93a7" font-style="italic">defend your workstations from bloatware gremlins</text>
+</svg>

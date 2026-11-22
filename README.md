@@ -1,4 +1,6 @@
-# Patch Panic
+<p align="center">
+  <img src=".github/header.svg" alt="Patch Panic: defend your workstations from bloatware gremlins" width="760">
+</p>
 
 A small arcade game in Python: bloatware gremlins sneak up to your workstations
 and try to install BloatOS. Swat them before the install finishes. If one runs
@@ -74,6 +76,7 @@ patch_panic/
   sprites.py   Pixel-art definitions + PNG export/loading
   assets/sprites/*.png
 tests/         Unit tests for the game rules (no window needed)
+tools/         make_readme_header.py: regenerates the README header (.github/header.svg)
 ```
 
 How it fits together: `World` decides what happens and announces it on the
@@ -114,3 +117,12 @@ pyinstaller --onefile --windowed --name PatchPanic run_game.py
 # output in dist/ -- uses the built-in sprites. To bundle edited PNGs instead,
 # add: --add-data "patch_panic/assets:patch_panic/assets"  (";" instead of ":" on Windows)
 ```
+
+## License
+
+Copyright (C) 2026 Kamran Zafar
+
+Patch Panic is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See [LICENSE](LICENSE) for the full text.
