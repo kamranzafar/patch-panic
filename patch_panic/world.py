@@ -28,8 +28,9 @@ from enum import Enum, auto
 
 from .config import (BLOAT, CABLES_PER_COMPUTER, CARRIER_SPEED_FACTOR, COMBO_MAX, COMBO_WINDOW,
                      DISK_SNAP_RADIUS, DYING_TIME, FIRST_SPAWN_DELAY, FRY_TIME, GRID_COLS, GRID_ROWS, HEIGHT,
-                     HUD_HEIGHT, LATE_CATCH_FRACTION, OS_NAMES, PERFECT_SAFETY, SABOTAGE_TIME, SCAVENGE_WAIT,
-                     SURGE_WARNING_TIME, SWEEP_RADIUS_SCALE, WIDTH, GremlinKind, Gremlins, LevelConfig, Points)
+                     HUD_HEIGHT, LATE_CATCH_FRACTION, OS_NAMES, PATCH_BREATHER, PERFECT_SAFETY, SABOTAGE_TIME,
+                     SCAVENGE_WAIT, SURGE_WARNING_TIME, SWEEP_RADIUS_SCALE, WIDTH, GremlinKind, Gremlins, LevelConfig,
+                     Points)
 from .entities import (Computer, Disk, Gremlin, GremlinState, Honeypot, Point, PowerUp, Surge, SurgeWarning,
                        distance, nearest_exit, random_edge_point)
 from .events import Event, EventBus
@@ -67,7 +68,8 @@ class World:
         self.to_spawn = self.config.gremlins
         self.spawn_timer = FIRST_SPAWN_DELAY
         self.surge_timer = self.config.surge_interval * 0.6
-        self.powerup_spawned = False
+        self.patches_spawned = 0
+        self.patch_quiet = 0.0          # seconds with no patch on screen and no power-up running
         self.freeze_timer = 0.0
         self.shield_timer = 0.0
         self.sweep_clicks = 0           # clicks left with the Antivirus Sweep's longer reach
@@ -131,6 +133,11 @@ class World:
     @property
     def is_shielded(self) -> bool:
         return self.shield_timer > 0
+
+    @property
+    def powerup_active(self) -> bool:
+        """A power-up effect is still running."""
+        return self.is_frozen or self.is_shielded or self.honeypot is not None or self.sweep_clicks > 0
 
     def available_targets(self) -> list[Computer]:
         return [c for c in self.computers if c.is_clean and c.targeted is None]
@@ -257,7 +264,7 @@ class World:
         return warning
 
     def spawn_powerup(self) -> PowerUp:
-        self.powerup_spawned = True
+        self.patches_spawned += 1
         self.powerup = PowerUp(self.rng)
         return self.powerup
 
@@ -334,10 +341,25 @@ class World:
         self.spawn_timer = self.config.spawn_interval * self.rng.uniform(0.6, 1.3)
 
     def _update_powerup(self, dt: float) -> None:
-        if not self.powerup_spawned and not self.scripted and self.to_spawn <= self.config.gremlins // 2:
+        busy = self.powerup is not None or self.powerup_active
+        self.patch_quiet = 0.0 if busy else self.patch_quiet + dt
+        if not self.scripted and self._patch_due():
             self.spawn_powerup()
         if self.powerup and not self.powerup.advance(dt):
             self.powerup = None
+
+    def _patch_due(self) -> bool:
+        """Patches are spread evenly over the level: with n of them, the k-th flies
+        by once k/(n+1) of the level's gremlins have been dealt with. Clearing
+        gremlins is what ends a level, so this tracks its real length (spawning
+        alone finishes long before the end). A patch also waits until the last
+        one has gone and its effect has worn off, plus a short breather, so
+        power-ups never overlap or come back to back."""
+        total = self.config.patches
+        if self.patches_spawned >= total or (self.patches_spawned and self.patch_quiet < PATCH_BREATHER):
+            return False
+        cleared = max(0, self.config.gremlins - self.remaining_gremlins)
+        return cleared * (total + 1) >= self.config.gremlins * (self.patches_spawned + 1)
 
     def _update_gremlins(self, dt: float) -> None:
         for g in list(self.gremlins):

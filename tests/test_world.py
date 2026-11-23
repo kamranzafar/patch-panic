@@ -21,8 +21,9 @@ import random
 import pytest
 
 from patch_panic.config import (BLOAT, CARRIER_SPEED_FACTOR, COMBO_MAX, COMBO_WINDOW, DISK_SNAP_RADIUS, FRY_TIME,
-                                HITSTOP_TIME, HONEYPOT_TIME, PERFECT_SAFETY, SABOTAGE_TIME, SCAVENGE_WAIT, SHAKE_TIME,
-                                SURGE_WARNING_TIME, SWEEP_CLICKS, Gremlins, LevelConfig, Points)
+                                HITSTOP_TIME, HONEYPOT_TIME, PATCH_BREATHER, PERFECT_SAFETY, SABOTAGE_TIME,
+                                SCAVENGE_WAIT, SHAKE_TIME, SURGE_WARNING_TIME, SWEEP_CLICKS, Difficulty, Gremlins,
+                                LevelConfig, Points)
 from patch_panic.effects import Effects
 from patch_panic.entities import Disk, GremlinState, Surge
 from patch_panic.events import Event, EventBus
@@ -298,14 +299,60 @@ def test_honeypot_lures_walking_gremlins_until_it_expires(world):
     run_until(world, lambda: gremlin.state is GremlinState.INSTALL)
 
 
+def clear_gremlins(world, count):
+    """Pretend `count` of the level's gremlins have been spawned and dealt with."""
+    world.to_spawn = world.config.gremlins - count
+
+
 def test_powerup_appears_halfway_and_awards_points(world, bus):
     rec = Recorder(bus)
-    world.to_spawn = world.config.gremlins // 2
+    clear_gremlins(world, world.config.gremlins // 2)
     world.update(0.01)
     assert world.powerup is not None
     world.click((world.powerup.x, world.powerup.y))
     assert world.score == Points.POWERUP_PER_LEVEL
     assert Event.POWERUP_COLLECTED in rec.names()
+
+
+def test_powerup_waits_for_gremlins_to_be_cleared_not_just_spawned(world):
+    world.to_spawn = 0                                # all 6 spawned, but 4 still about: only 2 cleared
+    for computer in world.computers[:4]:
+        walking_gremlin(world, computer)
+    world.update(0.01)
+    assert world.powerup is None
+
+
+def test_longer_levels_get_more_patches():
+    assert [LevelConfig.for_level(n).patches for n in (1, 5, 10, 11, 16, 17, 100)] == [1, 1, 1, 2, 2, 3, 3]
+    assert LevelConfig.for_level(11, Difficulty.RELAXED).patches == 1
+    assert LevelConfig.for_level(9, Difficulty.FRANTIC).patches == 2
+
+
+def test_patches_are_spread_out_and_never_overlap(bus):
+    world = World(level=11, score=0, bus=bus, rng=random.Random(42))   # 36 gremlins: patches at 12 and 24
+    clear_gremlins(world, 11)
+    world.update(0.01)
+    assert world.powerup is None
+    clear_gremlins(world, 12)
+    world.update(0.01)
+    first = world.powerup
+    assert first is not None
+    clear_gremlins(world, 24)
+    world.update(0.01)
+    assert world.powerup is first                     # never two on screen at once
+    world.click((first.x, first.y))
+    Firewall().apply(world)                           # whatever it gave, pretend it is still running
+    world.update(1.0)
+    assert world.powerup is None                      # not while a power-up is running
+    run_until(world, lambda: not world.powerup_active)
+    world.update(PATCH_BREATHER - 0.5)
+    assert world.powerup is None                      # nor straight after it ends
+    world.update(1.0)
+    assert world.powerup is not None and world.patches_spawned == 2
+    world.powerup = None
+    clear_gremlins(world, world.config.gremlins)
+    world.update(PATCH_BREATHER + 1)
+    assert world.powerup is None
 
 
 # --- scoring -------------------------------------------------------------------------------

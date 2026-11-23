@@ -62,6 +62,9 @@ SCAVENGE_WAIT = 6.0                # after chewing, a scavenger lingers this lon
 HONEYPOT_TIME = 6.0
 SWEEP_CLICKS = 3                   # Antivirus Sweep: number of clicks with a bigger reach
 SWEEP_RADIUS_SCALE = 2.0
+GREMLINS_PER_PATCH = 18            # one golden patch per this many gremlins in a level...
+MAX_PATCHES = 3                    # ...but never more than this
+PATCH_BREATHER = 4.0               # quiet seconds after a patch or its effect before the next can fly
 
 # --- Layout -------------------------------------------------------------------------
 GRID_COLS, GRID_ROWS = 6, 3        # computers are placed in jittered grid cells
@@ -232,6 +235,11 @@ class LevelConfig:
         """A small, slow level; the tutorial spawns everything itself."""
         return cls(level=1, computers=4, gremlins=0, max_alive=3, spawn_interval=1.0, gremlin_speed=70,
                    install_time=6.0, surge_interval=10.0, max_surges=1, surge_speed=40, surge_chain=0.0)
+
+    @property
+    def patches(self) -> int:
+        """Golden patches that fly by this level: longer levels get more help."""
+        return max(1, min(MAX_PATCHES, self.gremlins // GREMLINS_PER_PATCH))
 
     def scaled(self, difficulty: Difficulty) -> LevelConfig:
         if difficulty is Difficulty.NORMAL:

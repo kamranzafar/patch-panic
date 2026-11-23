@@ -24,8 +24,9 @@ Surges can jump on down the network, and a gremlin caught mid-install on a fried
 machine gets zapped too. A ring fills up around every installing gremlin, and a
 cable flashes just before a surge appears on it, so you can see what's coming.
 
-Halfway through each level a golden patch flies across the screen. Click it for
-bonus points plus a random power-up:
+Partway through each level a golden patch flies across the screen. Longer levels
+get more of them (two from level 11, three from level 17), spread evenly over the
+level and never overlapping. Click one for bonus points plus a random power-up:
 
 - **Firewall** – all gremlins freeze for 5 seconds
 - **Surge Guard** – clears every spark and blocks new ones for 8 seconds
