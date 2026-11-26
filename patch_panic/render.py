@@ -24,9 +24,9 @@ import pygame
 
 from . import sprites
 from .config import (ATTENTION_RADIUS, BLOAT, DISK_BLINK_TIME, DYING_TIME, HEIGHT, HUD_HEIGHT, INSTALL_WARN_TIME,
-                     OS_COLORS, WIDTH, Color, Gremlins)
+                     OS_COLORS, SABOTAGE_TIME, WIDTH, Color, Gremlins)
 from .effects import Effects
-from .entities import Computer, Disk, Gremlin, GremlinState, Point, PowerUp, Surge
+from .entities import Computer, Disk, Gremlin, GremlinState, Honeypot, Point, PowerUp, Surge
 from .world import World
 
 
@@ -121,9 +121,14 @@ class Renderer:
                 pygame.draw.line(self.surface, Color.ICE, a.cable_anchor(), b.cable_anchor(), 3)
         for surge in world.surges:
             pygame.draw.line(self.surface, Color.SURGE_PATH, surge.pos, surge.dst.cable_anchor(), 4)
+        warn_color = Color.SURGE if int(t * 16) % 2 else Color.SURGE_PATH
         for warning in world.surge_warnings:
-            color = Color.SURGE if int(t * 16) % 2 else Color.SURGE_PATH
-            pygame.draw.line(self.surface, color, warning.src.cable_anchor(), warning.dst.cable_anchor(), 4)
+            pygame.draw.line(self.surface, warn_color, warning.src.cable_anchor(), warning.dst.cable_anchor(), 4)
+        for a, b in world.cables_about_to_spark:
+            pygame.draw.line(self.surface, warn_color, a.cable_anchor(), b.cable_anchor(), 4)
+
+        if world.honeypot:
+            self.draw_honeypot(world.honeypot, t)
 
         # computers and live gremlins, back to front
         standing = world.computers + world.alive_gremlins
@@ -135,6 +140,8 @@ class Renderer:
         for gremlin in world.alive_gremlins:
             if gremlin.state is GremlinState.INSTALL and gremlin.target is not None:
                 self.draw_progress_ring(gremlin, gremlin.target.install, world.config.install_time, t)
+            elif gremlin.state is GremlinState.SABOTAGE:
+                self.draw_progress_ring(gremlin, gremlin.timer / SABOTAGE_TIME, SABOTAGE_TIME, t)
         if world.dragging is not None:
             self.draw_snap_targets(world, world.dragging.kind, t)
 
@@ -183,7 +190,7 @@ class Renderer:
             self.blit_center(self.art[f"glyph_{c.native}"], (x, y + 6))  # on the colour stripe
 
     def draw_progress_ring(self, g: Gremlin, progress: float, duration: float, t: float) -> None:
-        """A ring around an installing gremlin that fills up, flashing red near the end."""
+        """A ring around a busy gremlin (installing, sabotaging) that fills up, flashing red near the end."""
         progress = min(1.0, progress)
         center = (g.x, g.y + Gremlin.BODY_OFFSET_Y)
         rect = pygame.Rect(0, 0, 60, 60)
@@ -201,6 +208,15 @@ class Renderer:
         for computer in world.computers:
             if computer.accepts(kind):
                 pygame.draw.rect(self.surface, color, computer.rect.inflate(10, 10), 2, border_radius=8)
+
+    def draw_honeypot(self, honeypot: Honeypot, t: float) -> None:
+        pulse = 0.5 + 0.5 * math.sin(t * 6)
+        glow = pygame.Surface((120, 120), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (*Color.HONEYPOT, int(40 + 50 * pulse)), (60, 60), 50)
+        self.surface.blit(glow, (honeypot.x - 60, honeypot.y - 64))
+        pygame.draw.ellipse(self.surface, Color.SHADOW, (honeypot.x - 38, honeypot.y + 25, 76, 16))
+        self.surface.blit(self.art["honeypot"], (honeypot.x - 36, honeypot.y - 38))
+        self.blit_center(self.art[f"star{int(t * 5) % 2}"], (honeypot.x, honeypot.y - 16))
 
     @staticmethod
     def gremlin_prefix(g: Gremlin) -> str:
@@ -220,7 +236,7 @@ class Renderer:
             self.surface.blit(image, (x - image.get_width() / 2, y + 16 - image.get_height()))
             return
         pygame.draw.ellipse(self.surface, Color.SHADOW, (x - 16, y + 11, 32, 9))
-        if g.state is GremlinState.INSTALL:
+        if g.state in (GremlinState.INSTALL, GremlinState.SABOTAGE):
             name, bob = f"{prefix}_type{int(t * 10) % 2}", 0
         else:
             frame = int(t * 8 + g.phase) % 2
@@ -299,6 +315,8 @@ class Renderer:
             return f"Firewall {world.freeze_timer:.0f}s"
         if world.is_shielded:
             return f"Guard {world.shield_timer:.0f}s"
+        if world.honeypot:
+            return f"Honeypot {world.honeypot.timer:.0f}s"
         if world.sweep_clicks:
             return f"Sweep x{world.sweep_clicks}"
         return ""

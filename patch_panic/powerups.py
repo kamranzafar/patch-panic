@@ -26,7 +26,7 @@ import random
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from .config import AUTO_PATCH_MAX, FREEZE_TIME, SHIELD_TIME, SWEEP_CLICKS
+from .config import AUTO_PATCH_MAX, FREEZE_TIME, HONEYPOT_TIME, SHIELD_TIME, SWEEP_CLICKS
 
 if TYPE_CHECKING:
     from .world import World
@@ -81,7 +81,14 @@ class Rollback(PowerUpEffect):
         return f"ROLLBACK! {world.rollback_disks()} restored"
 
 
-ALL_POWERUPS: tuple[PowerUpEffect, ...] = (Firewall(), SurgeGuard(), AutoPatch(), AntivirusSweep(), Rollback())
+class HoneypotLure(PowerUpEffect):
+    def apply(self, world: World) -> str:
+        world.place_honeypot(HONEYPOT_TIME)
+        return "HONEYPOT! Gremlins lured away"
+
+
+ALL_POWERUPS: tuple[PowerUpEffect, ...] = (Firewall(), SurgeGuard(), AutoPatch(), AntivirusSweep(), Rollback(),
+                                           HoneypotLure())
 
 
 def choose_powerup(world: World, rng: random.Random) -> PowerUpEffect:

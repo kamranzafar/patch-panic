@@ -15,17 +15,19 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Unit tests for the game rules. No window or audio needed."""
+import dataclasses
 import random
 
 import pytest
 
 from patch_panic.config import (BLOAT, CARRIER_SPEED_FACTOR, COMBO_MAX, COMBO_WINDOW, DISK_SNAP_RADIUS, FRY_TIME,
-                                HITSTOP_TIME, PERFECT_SAFETY, SHAKE_TIME,
-                                SURGE_WARNING_TIME, SWEEP_CLICKS, Gremlins, LevelConfig, Points)
+                                HITSTOP_TIME, HONEYPOT_TIME, PATCH_BREATHER, PERFECT_SAFETY, SABOTAGE_TIME,
+                                SCAVENGE_WAIT, SHAKE_TIME, SURGE_WARNING_TIME, SWEEP_CLICKS, Difficulty, Gremlins,
+                                LevelConfig, Points)
 from patch_panic.effects import Effects
 from patch_panic.entities import Disk, GremlinState, Surge
 from patch_panic.events import Event, EventBus
-from patch_panic.powerups import AntivirusSweep, AutoPatch, Firewall, Rollback, SurgeGuard
+from patch_panic.powerups import AntivirusSweep, AutoPatch, Firewall, HoneypotLure, Rollback, SurgeGuard
 from patch_panic.world import Outcome, World
 
 
@@ -286,14 +288,71 @@ def test_rollback_sends_disks_home(world):
     assert not Rollback().is_available(world)
 
 
+def test_honeypot_lures_walking_gremlins_until_it_expires(world):
+    gremlin = walking_gremlin(world, world.computers[0])
+    HoneypotLure().apply(world)
+    honeypot = world.honeypot
+    assert honeypot.timer == HONEYPOT_TIME
+    run_until(world, lambda: (gremlin.x, gremlin.y) == honeypot.spot_for(gremlin), max_seconds=HONEYPOT_TIME)
+    assert gremlin.state is GremlinState.WALK_IN
+    run_until(world, lambda: world.honeypot is None)
+    run_until(world, lambda: gremlin.state is GremlinState.INSTALL)
+
+
+def clear_gremlins(world, count):
+    """Pretend `count` of the level's gremlins have been spawned and dealt with."""
+    world.to_spawn = world.config.gremlins - count
+
+
 def test_powerup_appears_halfway_and_awards_points(world, bus):
     rec = Recorder(bus)
-    world.to_spawn = world.config.gremlins // 2
+    clear_gremlins(world, world.config.gremlins // 2)
     world.update(0.01)
     assert world.powerup is not None
     world.click((world.powerup.x, world.powerup.y))
     assert world.score == Points.POWERUP_PER_LEVEL
     assert Event.POWERUP_COLLECTED in rec.names()
+
+
+def test_powerup_waits_for_gremlins_to_be_cleared_not_just_spawned(world):
+    world.to_spawn = 0                                # all 6 spawned, but 4 still about: only 2 cleared
+    for computer in world.computers[:4]:
+        walking_gremlin(world, computer)
+    world.update(0.01)
+    assert world.powerup is None
+
+
+def test_longer_levels_get_more_patches():
+    assert [LevelConfig.for_level(n).patches for n in (1, 5, 10, 11, 16, 17, 100)] == [1, 1, 1, 2, 2, 3, 3]
+    assert LevelConfig.for_level(11, Difficulty.RELAXED).patches == 1
+    assert LevelConfig.for_level(9, Difficulty.FRANTIC).patches == 2
+
+
+def test_patches_are_spread_out_and_never_overlap(bus):
+    world = World(level=11, score=0, bus=bus, rng=random.Random(42))   # 36 gremlins: patches at 12 and 24
+    clear_gremlins(world, 11)
+    world.update(0.01)
+    assert world.powerup is None
+    clear_gremlins(world, 12)
+    world.update(0.01)
+    first = world.powerup
+    assert first is not None
+    clear_gremlins(world, 24)
+    world.update(0.01)
+    assert world.powerup is first                     # never two on screen at once
+    world.click((first.x, first.y))
+    Firewall().apply(world)                           # whatever it gave, pretend it is still running
+    world.update(1.0)
+    assert world.powerup is None                      # not while a power-up is running
+    run_until(world, lambda: not world.powerup_active)
+    world.update(PATCH_BREATHER - 0.5)
+    assert world.powerup is None                      # nor straight after it ends
+    world.update(1.0)
+    assert world.powerup is not None and world.patches_spawned == 2
+    world.powerup = None
+    clear_gremlins(world, world.config.gremlins)
+    world.update(PATCH_BREATHER + 1)
+    assert world.powerup is None
 
 
 # --- scoring -------------------------------------------------------------------------------
@@ -397,6 +456,144 @@ def test_splitter_splits_into_sprinters(world, bus):
     assert len(kids) == Gremlins.SPLITTER.splits
     assert all(k.target is not None and k.target.targeted is k for k in kids)
     assert Event.GREMLIN_SPLIT in rec.names()
+
+
+def sabotaging(world):
+    cable = world.cables[0]
+    saboteur = world.spawn_saboteur(cable)
+    saboteur.x, saboteur.y = saboteur.cable_spot()
+    world.to_spawn = 0
+    world.update(0.01)
+    assert saboteur.state is GremlinState.SABOTAGE
+    return saboteur
+
+
+def test_saboteur_chews_a_cable_into_a_surge(world, bus):
+    rec = Recorder(bus)
+    saboteur = sabotaging(world)
+    run_until(world, lambda: world.surges, max_seconds=SABOTAGE_TIME + 0.1)
+    assert len(world.surges) == 1 and set((world.surges[0].src, world.surges[0].dst)) == set(saboteur.cable)
+    assert saboteur.state is GremlinState.WALK_OUT
+    assert Event.CABLE_SABOTAGED in rec.names()
+
+
+def test_chewed_cable_flashes_and_warns_before_it_sparks(world, bus):
+    rec = Recorder(bus)
+    saboteur = sabotaging(world)
+    assert world.cables_about_to_spark == []
+    world.update(SABOTAGE_TIME - SURGE_WARNING_TIME / 2)
+    assert world.cables_about_to_spark == [saboteur.cable]
+    assert rec.names().count(Event.SURGE_WARNING) == 1 and not world.surges
+    world.update(SURGE_WARNING_TIME)
+    assert world.surges and rec.names().count(Event.SURGE_WARNING) == 1  # warned once per chew
+
+
+def test_no_flash_while_the_cables_are_shielded(world):
+    sabotaging(world)
+    world.shield_cables(30)
+    world.update(SABOTAGE_TIME - SURGE_WARNING_TIME / 2)
+    assert world.cables_about_to_spark == []
+
+
+def test_a_saboteur_with_more_chews_moves_on_to_another_cable(world, bus):
+    rec = Recorder(bus)
+    tough = dataclasses.replace(Gremlins.SABOTEUR, chews=2)
+    saboteur = world.spawn_saboteur(world.cables[0], kind=tough)
+    saboteur.x, saboteur.y = saboteur.cable_spot()
+    world.to_spawn = 0
+    first = saboteur.cable
+    run_until(world, lambda: world.surges, max_seconds=SABOTAGE_TIME + 0.5)
+    assert saboteur.state is GremlinState.WALK_IN and saboteur.cable not in (None, first)
+    world.shield_cables(0)  # clear the first surge so it can't interfere
+    run_until(world, lambda: rec.names().count(Event.CABLE_SABOTAGED) == 2, max_seconds=20)
+    assert saboteur.state is GremlinState.WALK_OUT
+
+
+def test_swatting_a_saboteur_stops_the_surge(world):
+    saboteur = sabotaging(world)
+    world.click((saboteur.x, saboteur.y - 12))
+    world.update(SABOTAGE_TIME)
+    assert not world.surges
+
+
+def scavenger_near(world, x, y):
+    gremlin = world.spawn_saboteur(world.cables[0], pos=(x, y), kind=Gremlins.SCAVENGER)
+    world.to_spawn = 0
+    return gremlin
+
+
+def test_scavenger_steals_a_loose_disk_and_runs(world, bus):
+    rec = Recorder(bus)
+    computer = world.computers[0]
+    computer.os = None
+    disk = Disk(computer.native, 300, 300)
+    world.disks.append(disk)
+    scavenger = scavenger_near(world, 340, 300)
+    speed = scavenger.speed
+    run_until(world, lambda: scavenger.carry is not None, max_seconds=3)
+    assert scavenger.carry == computer.native and disk not in world.disks
+    assert scavenger.state is GremlinState.WALK_OUT
+    assert scavenger.speed == pytest.approx(speed * CARRIER_SPEED_FACTOR)
+    assert Event.DISK_STOLEN in rec.names()
+
+    world.click((scavenger.x, scavenger.y - 12))  # swat it: the disk drops again
+    assert [d.kind for d in world.disks] == [computer.native]
+
+
+def test_scavenger_retargets_when_the_player_grabs_its_disk_first(world):
+    a, b = world.computers[0], world.computers[1]
+    a.os = b.os = None
+    near, far = Disk(a.native, 320, 300), Disk(b.native, 600, 400)
+    world.disks += [near, far]
+    scavenger = scavenger_near(world, 360, 300)
+    world.update(0.01)
+    assert scavenger.loot is near
+    world.click((near.x, near.y))  # the player picks it up first
+    world.update(0.01)
+    assert scavenger.loot is far
+
+
+def test_two_scavengers_go_for_different_disks(world):
+    a, b = world.computers[0], world.computers[1]
+    a.os = b.os = None
+    world.disks += [Disk(a.native, 300, 300), Disk(b.native, 600, 400)]
+    first, second = scavenger_near(world, 450, 350), scavenger_near(world, 460, 350)
+    world.update(0.01)
+    assert first.loot is not None and second.loot is not None and first.loot is not second.loot
+
+
+def test_scavenger_ignores_a_disk_until_its_machine_has_rebooted(world):
+    computer = world.computers[0]
+    world._fry(computer)  # rebooting, and its disk is on the floor
+    disk = world.disks[0]
+    scavenger = scavenger_near(world, disk.x + 40, disk.y)
+    scavenger.finish_sabotage()  # it has already chewed and is waiting for loot
+    run_until(world, lambda: not computer.is_rebooting, max_seconds=FRY_TIME + 0.1)
+    assert disk in world.disks  # left alone for the whole reboot
+    run_until(world, lambda: scavenger.carry is not None, max_seconds=2)  # usable now, so fair game
+
+
+def test_scavenger_chews_a_cable_then_waits_for_loot(world, bus):
+    rec = Recorder(bus)
+    scavenger = world.spawn_saboteur(world.cables[0], kind=Gremlins.SCAVENGER)
+    scavenger.x, scavenger.y = scavenger.cable_spot()
+    world.to_spawn = 0
+    run_until(world, lambda: Event.CABLE_SABOTAGED in rec.names(), max_seconds=SABOTAGE_TIME + 0.5)
+    assert scavenger.state is GremlinState.WALK_IN and scavenger.cable is None  # sticks around
+    computer = world.computers[2]
+    computer.os = None
+    world.disks.append(Disk(computer.native, scavenger.x + 30, scavenger.y))
+    run_until(world, lambda: scavenger.carry is not None, max_seconds=2)
+
+
+def test_scavenger_leaves_if_nothing_turns_up(world):
+    world.shield_cables(60)  # no surge, so nothing gets knocked loose
+    scavenger = world.spawn_saboteur(world.cables[0], kind=Gremlins.SCAVENGER)
+    scavenger.x, scavenger.y = scavenger.cable_spot()
+    world.to_spawn = 0
+    run_until(world, lambda: scavenger.state is GremlinState.WALK_OUT,
+              max_seconds=SABOTAGE_TIME + SCAVENGE_WAIT + 0.5)
+    assert scavenger.carry is None
 
 
 def test_spawning_mixes_in_the_level_kinds(bus):

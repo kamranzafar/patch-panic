@@ -37,12 +37,14 @@ class Event(Enum):
     GREMLIN_SPLIT = auto()       # x, y
     GREMLIN_ZAPPED = auto()      # x, y
     NEW_THREAT = auto()          # kind (first appearance of a gremlin kind)
+    CABLE_SABOTAGED = auto()     # x, y
     COMPUTER_INFECTED = auto()   # computer
     COMPUTER_FRIED = auto()      # computer
     OS_EJECTED = auto()          # computer
     OS_RESTORED = auto()         # computer
     DISK_PICKED_UP = auto()      # disk
     DISK_DROPPED = auto()        # disk
+    DISK_STOLEN = auto()         # x, y (a scavenger picked up a disk from the floor)
     DISK_REJECTED = auto()       # computer, reason
     SURGE_WARNING = auto()       # src, dst
     SURGE_ZAPPED = auto()        # x, y, chained

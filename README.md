@@ -24,14 +24,16 @@ Surges can jump on down the network, and a gremlin caught mid-install on a fried
 machine gets zapped too. A ring fills up around every installing gremlin, and a
 cable flashes just before a surge appears on it, so you can see what's coming.
 
-Halfway through each level a golden patch flies across the screen. Click it for
-bonus points plus a random power-up:
+Partway through each level a golden patch flies across the screen. Longer levels
+get more of them (two from level 11, three from level 17), spread evenly over the
+level and never overlapping. Click one for bonus points plus a random power-up:
 
 - **Firewall** – all gremlins freeze for 5 seconds
 - **Surge Guard** – clears every spark and blocks new ones for 8 seconds
 - **Auto-Patch** – instantly restores up to 2 broken computers
 - **Antivirus Sweep** – your next 3 swats reach twice as far
 - **Rollback** – every useful OS disk on the floor (or in your hand) flies home
+- **Honeypot** – a decoy computer lures walking gremlins away for 6 seconds
 
 Keep at least half your machines clean to survive each level. Finish a level
 with every machine clean for a **perfect bonus** and a safety net: the next
@@ -45,6 +47,8 @@ Each kind of gremlin has its own colour, and new kinds join in as the levels go 
 | Sprinter  | Cyan                       | 3          | Fast and small, so harder to hit              |
 | Armored   | Steel grey, gold horns     | 7          | Takes two swats (the first cracks its armour) |
 | Splitter  | Amber                      | 11         | Splits into two sprinters when swatted        |
+| Saboteur  | Purple, red horns          | 13         | Chews a network cable until it sparks a surge (the cable flashes just before) |
+| Scavenger | Dark green, yellow horns   | 17         | Steals OS disks left on the floor (once they can be put back) and runs off with them; with none around it chews a cable first, then waits for a disk to pop out |
 
 ## Modes
 
@@ -111,8 +115,8 @@ patch_panic/
                    screens                                                (State pattern)
   tutorial.py      Tutorial scene and its steps                           (State pattern)
   world.py         World: all game rules for one level; emits events
-  entities.py      Computer, Gremlin, Surge, Disk, PowerUp (state + behaviour, no drawing)
-  powerups.py      Firewall / SurgeGuard / AutoPatch / AntivirusSweep / Rollback
+  entities.py      Computer, Gremlin, Surge, Disk, PowerUp, Honeypot (state + behaviour, no drawing)
+  powerups.py      Firewall / SurgeGuard / AutoPatch / AntivirusSweep / Rollback / HoneypotLure
                                                                           (Strategy pattern)
   events.py        EventBus + Event enum                                  (Observer pattern)
   audio.py         Synthesised sounds, subscribed to game events

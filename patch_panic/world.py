@@ -28,9 +28,10 @@ from enum import Enum, auto
 
 from .config import (BLOAT, CABLES_PER_COMPUTER, CARRIER_SPEED_FACTOR, COMBO_MAX, COMBO_WINDOW,
                      DISK_SNAP_RADIUS, DYING_TIME, FIRST_SPAWN_DELAY, FRY_TIME, GRID_COLS, GRID_ROWS, HEIGHT,
-                     HUD_HEIGHT, LATE_CATCH_FRACTION, OS_NAMES, PERFECT_SAFETY, SURGE_WARNING_TIME,
-                     SWEEP_RADIUS_SCALE, WIDTH, GremlinKind, Gremlins, LevelConfig, Points)
-from .entities import (Computer, Disk, Gremlin, GremlinState, Point, PowerUp, Surge, SurgeWarning,
+                     HUD_HEIGHT, LATE_CATCH_FRACTION, OS_NAMES, PATCH_BREATHER, PERFECT_SAFETY, SABOTAGE_TIME,
+                     SCAVENGE_WAIT, SURGE_WARNING_TIME, SWEEP_RADIUS_SCALE, WIDTH, GremlinKind, Gremlins, LevelConfig,
+                     Points)
+from .entities import (Computer, Disk, Gremlin, GremlinState, Honeypot, Point, PowerUp, Surge, SurgeWarning,
                        distance, nearest_exit, random_edge_point)
 from .events import Event, EventBus
 from .powerups import choose_powerup
@@ -61,12 +62,14 @@ class World:
         self.surge_warnings: list[SurgeWarning] = []
         self.disks: list[Disk] = []
         self.powerup: PowerUp | None = None
+        self.honeypot: Honeypot | None = None
         self.dragging: Disk | None = None
 
         self.to_spawn = self.config.gremlins
         self.spawn_timer = FIRST_SPAWN_DELAY
         self.surge_timer = self.config.surge_interval * 0.6
-        self.powerup_spawned = False
+        self.patches_spawned = 0
+        self.patch_quiet = 0.0          # seconds with no patch on screen and no power-up running
         self.freeze_timer = 0.0
         self.shield_timer = 0.0
         self.sweep_clicks = 0           # clicks left with the Antivirus Sweep's longer reach
@@ -130,6 +133,11 @@ class World:
     @property
     def is_shielded(self) -> bool:
         return self.shield_timer > 0
+
+    @property
+    def powerup_active(self) -> bool:
+        """A power-up effect is still running."""
+        return self.is_frozen or self.is_shielded or self.honeypot is not None or self.sweep_clicks > 0
 
     def available_targets(self) -> list[Computer]:
         return [c for c in self.computers if c.is_clean and c.targeted is None]
@@ -235,6 +243,14 @@ class World:
     def activate_sweep(self, clicks: int) -> None:
         self.sweep_clicks = clicks
 
+    def place_honeypot(self, seconds: float) -> Honeypot:
+        """Put a decoy in the open spot farthest from every computer."""
+        spots = [(self.rng.uniform(120, WIDTH - 120), self.rng.uniform(HUD_HEIGHT + 80, HEIGHT - 80))
+                 for _ in range(12)]
+        x, y = max(spots, key=lambda p: min(distance(p, (c.x, c.y)) for c in self.computers))
+        self.honeypot = Honeypot(x, y, seconds)
+        return self.honeypot
+
     def spawn_surge(self, src: Computer, dst: Computer, progress: float = 0.05, chained: bool = False) -> Surge:
         surge = Surge(src, dst, progress, self.config.surge_speed, chained)
         self.surges.append(surge)
@@ -248,7 +264,7 @@ class World:
         return warning
 
     def spawn_powerup(self) -> PowerUp:
-        self.powerup_spawned = True
+        self.patches_spawned += 1
         self.powerup = PowerUp(self.rng)
         return self.powerup
 
@@ -268,6 +284,12 @@ class World:
                       pos: Point | None = None) -> Gremlin:
         gremlin = self._new_gremlin(kind, pos)
         gremlin.assign(target)
+        return gremlin
+
+    def spawn_saboteur(self, cable: tuple[Computer, Computer], pos: Point | None = None,
+                       kind: GremlinKind = Gremlins.SABOTEUR) -> Gremlin:
+        gremlin = self._new_gremlin(kind, pos)
+        gremlin.assign_cable(cable)
         return gremlin
 
     def _new_gremlin(self, kind: GremlinKind, pos: Point | None) -> Gremlin:
@@ -292,6 +314,8 @@ class World:
         if not self.scripted:
             self._update_spawning(dt)
         self._update_powerup(dt)
+        if self.honeypot and not self.honeypot.advance(dt):
+            self.honeypot = None
         self._update_gremlins(dt)
         self._update_surges(dt)
         self._update_disks(dt)
@@ -307,17 +331,35 @@ class World:
             return
         kind = self.rng.choices(self.config.kinds, weights=[k.weight for k in self.config.kinds])[0]
         targets = self.available_targets()
-        if not targets:
+        if kind.sabotages and self.cables:
+            self.spawn_saboteur(self.rng.choice(self.cables), kind=kind)
+        elif targets:
+            self.spawn_gremlin(self.rng.choice(targets), Gremlins.STANDARD if kind.sabotages else kind)
+        else:
             return
-        self.spawn_gremlin(self.rng.choice(targets), kind)
         self.to_spawn -= 1
         self.spawn_timer = self.config.spawn_interval * self.rng.uniform(0.6, 1.3)
 
     def _update_powerup(self, dt: float) -> None:
-        if not self.powerup_spawned and not self.scripted and self.to_spawn <= self.config.gremlins // 2:
+        busy = self.powerup is not None or self.powerup_active
+        self.patch_quiet = 0.0 if busy else self.patch_quiet + dt
+        if not self.scripted and self._patch_due():
             self.spawn_powerup()
         if self.powerup and not self.powerup.advance(dt):
             self.powerup = None
+
+    def _patch_due(self) -> bool:
+        """Patches are spread evenly over the level: with n of them, the k-th flies
+        by once k/(n+1) of the level's gremlins have been dealt with. Clearing
+        gremlins is what ends a level, so this tracks its real length (spawning
+        alone finishes long before the end). A patch also waits until the last
+        one has gone and its effect has worn off, plus a short breather, so
+        power-ups never overlap or come back to back."""
+        total = self.config.patches
+        if self.patches_spawned >= total or (self.patches_spawned and self.patch_quiet < PATCH_BREATHER):
+            return False
+        cleared = max(0, self.config.gremlins - self.remaining_gremlins)
+        return cleared * (total + 1) >= self.config.gremlins * (self.patches_spawned + 1)
 
     def _update_gremlins(self, dt: float) -> None:
         for g in list(self.gremlins):
@@ -331,10 +373,22 @@ class World:
                 self._walk_in(g, dt)
             elif g.state is GremlinState.INSTALL:
                 self._install(g, dt)
+            elif g.state is GremlinState.SABOTAGE:
+                self._sabotage(g, dt)
             elif g.state is GremlinState.WALK_OUT and g.move_toward(*g.exit, dt):
                 self.gremlins.remove(g)  # escaped with whatever it was carrying
 
     def _walk_in(self, g: Gremlin, dt: float) -> None:
+        if self.honeypot is not None:  # lured: wait by the decoy until it expires
+            g.move_toward(*self.honeypot.spot_for(g), dt)
+            return
+        if g.kind.scavenges:
+            self._scavenge(g, dt)
+            return
+        if g.cable is not None:
+            if g.move_toward(*g.cable_spot(), dt):
+                g.start_sabotage()
+            return
         if g.target.targeted is not g:  # target was fried on the way: find another
             targets = self.available_targets()
             if not targets:
@@ -343,6 +397,50 @@ class World:
             g.assign(self.rng.choice(targets))
         if g.move_toward(*g.target.work_spot(), dt):
             g.start_install()
+
+    def _scavenge(self, g: Gremlin, dt: float) -> None:
+        """Grab a loose disk if there is one; otherwise chew a cable to knock one loose, then wait."""
+        loot = self._claim_loot(g)
+        if loot is not None:
+            if g.move_toward(loot.x, loot.y, dt):
+                self._steal(g, loot)
+            return
+        if g.cable is not None:
+            if g.move_toward(*g.cable_spot(), dt):
+                g.start_sabotage()
+            return
+        g.timer += dt  # already chewed its cable: linger in case a disk pops out
+        if g.timer >= SCAVENGE_WAIT:
+            g.leave(nearest_exit(g.x, g.y))
+
+    def _usable(self, disk: Disk) -> bool:
+        """Could the player put this disk back right now? (Not while its machine is still rebooting.)"""
+        return any(c.accepts(disk.kind) for c in self.computers)
+
+    def _claim_loot(self, g: Gremlin) -> Disk | None:
+        """The floor disk this scavenger is after: keep its current one, or claim the nearest free one.
+
+        Only disks the player could already put back count, so a scavenger never snatches a disk
+        during the reboot, when the player has no way to use it yet.
+        """
+        if g.loot is not None and g.loot in self.disks and self._usable(g.loot):
+            return g.loot
+        g.loot = None
+        free = [d for d in self.disks if self._usable(d)
+                and (d.claimed_by is None or not d.claimed_by.is_alive or d.claimed_by.loot is not d)]
+        if not free:
+            return None
+        g.loot = min(free, key=lambda d: distance((g.x, g.y), (d.x, d.y)))
+        g.loot.claimed_by = g
+        return g.loot
+
+    def _steal(self, g: Gremlin, disk: Disk) -> None:
+        self.disks.remove(disk)
+        g.loot = None
+        g.carry = disk.kind
+        g.speed *= CARRIER_SPEED_FACTOR  # runs for it, like any thief
+        g.leave(nearest_exit(g.x, g.y))
+        self.bus.emit(Event.DISK_STOLEN, x=disk.x, y=disk.y)
 
     def _install(self, g: Gremlin, dt: float) -> None:
         g.timer += dt
@@ -356,6 +454,52 @@ class World:
             computer.targeted = None
             g.leave(nearest_exit(g.x, g.y))
             self.bus.emit(Event.COMPUTER_INFECTED, computer=computer)
+
+    @property
+    def cables_about_to_spark(self) -> list[tuple[Computer, Computer]]:
+        """Cables being chewed that will spark within SURGE_WARNING_TIME (drawn flashing, like a warning)."""
+        if self.is_shielded:
+            return []
+        return [g.cable for g in self.alive_gremlins
+                if g.state is GremlinState.SABOTAGE and g.timer >= SABOTAGE_TIME - SURGE_WARNING_TIME]
+
+    def _sabotage(self, g: Gremlin, dt: float) -> None:
+        g.timer += dt
+        if not g.warned and not self.is_shielded and g.timer >= SABOTAGE_TIME - SURGE_WARNING_TIME:
+            g.warned = True
+            src, dst = g.cable
+            self.bus.emit(Event.SURGE_WARNING, src=src, dst=dst)
+        if g.timer < SABOTAGE_TIME:
+            return
+        x, y = g.cable_spot()
+        cable = g.cable
+        g.chews_left -= 1
+        next_cable = self._next_cable(g) if g.chews_left > 0 else None
+        if g.kind.scavenges:
+            g.finish_sabotage()  # sticks around to grab whatever the surge knocks loose
+        elif next_cable is not None:
+            g.finish_sabotage()
+            g.assign_cable(next_cable)  # on to the next cable
+        else:
+            g.leave(nearest_exit(g.x, g.y))
+        if self.is_shielded or len(self.surges) >= self.config.max_surges + 2:
+            return  # the cable is protected, or the network is already as busy as it gets
+        src, dst = cable if self.rng.random() < 0.5 else cable[::-1]
+        self.spawn_surge(src, dst, 0.5)
+        self.bus.emit(Event.CABLE_SABOTAGED, x=x, y=y)
+
+    def _next_cable(self, g: Gremlin) -> tuple[Computer, Computer] | None:
+        """The nearest other cable for a saboteur to chew next."""
+        others = [c for c in self.cables if c != g.cable]
+        if not others:
+            return None
+        here = g.cable_spot()
+
+        def middle(cable):
+            (ax, ay), (bx, by) = (c.cable_anchor() for c in cable)
+            return (ax + bx) / 2, (ay + by) / 2
+
+        return min(others, key=lambda c: distance(here, middle(c)))
 
     def _update_surges(self, dt: float) -> None:
         self.surge_timer -= dt
